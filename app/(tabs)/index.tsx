@@ -1,75 +1,186 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import React from 'react';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../../context/AuthContext';
 
 export default function HomeScreen() {
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = () => {
+    Alert.alert(
+      'Déconnexion',
+      'Êtes-vous sûr de vouloir vous déconnecter ?',
+      [
+        {
+          text: 'Annuler',
+          style: 'cancel',
+        },
+        {
+          text: 'Se déconnecter',
+          style: 'destructive',
+          onPress: signOut,
+        },
+      ]
+    );
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+    <SafeAreaView style={styles.container}>
+      <LinearGradient
+        colors={['#6B46C1', '#9333EA', '#A855F7']}
+        style={styles.gradient}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.welcomeText}>Salut ! 👋</Text>
+            <Text style={styles.userText}>
+              {user?.displayName || user?.email || 'Gamer'}
+            </Text>
+          </View>
+          <TouchableOpacity 
+            style={styles.signOutButton}
+            onPress={handleSignOut}
+          >
+            <Ionicons name="log-out-outline" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Main Content */}
+        <View style={styles.content}>
+          <View style={styles.logoContainer}>
+            <Text style={styles.logo}>🎮</Text>
+            <Text style={styles.appName}>NextMate</Text>
+            <Text style={styles.tagline}>
+              Trouve tes mates de jeu parfaits !
+            </Text>
+          </View>
+
+          {/* Quick Actions */}
+          <View style={styles.actionsContainer}>
+            <TouchableOpacity style={styles.actionCard}>
+              <LinearGradient
+                colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+                style={styles.cardGradient}
+              >
+                <Ionicons name="people-outline" size={32} color="#FFFFFF" style={styles.actionIcon} />
+                <Text style={styles.actionTitle}>Trouver des Mates</Text>
+                <Text style={styles.actionSubtitle}>Découvre des gamers compatibles</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionCard}>
+              <LinearGradient
+                colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+                style={styles.cardGradient}
+              >
+                <Ionicons name="game-controller-outline" size={32} color="#FFFFFF" style={styles.actionIcon} />
+                <Text style={styles.actionTitle}>Mes Jeux</Text>
+                <Text style={styles.actionSubtitle}>Gère ta liste de jeux</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionCard}>
+              <LinearGradient
+                colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0.1)']}
+                style={styles.cardGradient}
+              >
+                <Ionicons name="calendar-outline" size={32} color="#FFFFFF" style={styles.actionIcon} />
+                <Text style={styles.actionTitle}>Disponibilités</Text>
+                <Text style={styles.actionSubtitle}>Configure tes créneaux</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </LinearGradient>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
   },
-  stepContainer: {
-    gap: 8,
+  gradient: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 20,
+  },
+  welcomeText: {
+    fontSize: 16,
+    color: '#A1A1AA',
+  },
+  userText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginTop: 4,
+  },
+  signOutButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  content: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  logo: {
+    fontSize: 64,
+    marginBottom: 10,
+  },
+  appName: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  tagline: {
+    fontSize: 16,
+    color: '#A1A1AA',
+    textAlign: 'center',
+  },
+  actionsContainer: {
+    flex: 1,
+    gap: 16,
+  },
+  actionCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  cardGradient: {
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  actionIcon: {
+    marginBottom: 12,
+  },
+  actionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  actionSubtitle: {
+    fontSize: 14,
+    color: '#A1A1AA',
+    textAlign: 'center',
   },
 });
