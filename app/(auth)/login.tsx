@@ -1,167 +1,197 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { Link, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import { auth } from '../../config/firebase';
+import { Alert, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function LoginScreen() {
+  const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [pseudo, setPseudo] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  
+  // États pour la visibilité des mots de passe
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  
+  const { signIn, signUp, loading } = useAuth();
+  const router = useRouter();
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Erreur', 'Veuillez remplir tous les champs');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.replace('/(tabs)'); // Rediriger vers l'écran principal
-    } catch (error: any) {
-      let errorMessage = 'Une erreur est survenue';
-      switch (error.code) {
-        case 'auth/user-not-found':
-          errorMessage = 'Aucun compte trouvé avec cet email';
-          break;
-        case 'auth/wrong-password':
-          errorMessage = 'Mot de passe incorrect';
-          break;
-        case 'auth/invalid-email':
-          errorMessage = 'Adresse email invalide';
-          break;
-        case 'auth/too-many-requests':
-          errorMessage = 'Trop de tentatives. Réessayez plus tard';
-          break;
-        default:
-          errorMessage = 'Email ou mot de passe incorrect';
+  const handleAuth = async () => {
+    if (activeTab === 'login') {
+      const result = await signIn(email, password);
+      if (result.success) {
+        router.replace('/(tabs)');
+      } else {
+        Alert.alert('Erreur', result.error || 'Connexion échouée');
       }
-      Alert.alert('Erreur de connexion', errorMessage);
-    } finally {
-      setLoading(false);
+    } else {
+      if (password !== confirmPassword) {
+        Alert.alert('Erreur', 'Les mots de passe ne correspondent pas');
+        return;
+      }
+      const result = await signUp(email, password, pseudo);
+      if (result.success) {
+        router.replace('/(tabs)');
+      } else {
+        Alert.alert('Erreur', result.error || 'Inscription échouée');
+      }
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+      <StatusBar hidden />
       <LinearGradient
-        colors={['#6B46C1', '#9333EA', '#A855F7']}
+        colors={['#2F0C4D', '#471573']}
         style={styles.gradient}
       >
-        <KeyboardAvoidingView
-          style={styles.content}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          {/* Onglets Login/Sign Up */}
+        <View style={styles.content}>
+          <Text style={styles.title}>
+            {activeTab === 'login' ? 'Bienvenue !' : 'Créer un compte'}
+          </Text>
+          <Text style={styles.subtitle}>
+            {activeTab === 'login' 
+              ? 'Connectez-vous pour continuer' 
+              : 'Rejoignez NextMate aujourd\'hui'}
+          </Text>
+
+          {/* Tabs */}
           <View style={styles.tabContainer}>
-            <TouchableOpacity style={[styles.tab, styles.activeTab]}>
-              <Text style={[styles.tabText, styles.activeTabText]}>Login</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.tab}
-              onPress={() => router.push('/(auth)/register')}
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'login' && styles.activeTab]}
+              onPress={() => setActiveTab('login')}
             >
-              <Text style={styles.tabText}>Sign Up</Text>
+              <Text style={[styles.tabText, activeTab === 'login' && styles.activeTabText]}>
+                Connexion
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'signup' && styles.activeTab]}
+              onPress={() => setActiveTab('signup')}
+            >
+              <Text style={[styles.tabText, activeTab === 'signup' && styles.activeTabText]}>
+                Inscription
+              </Text>
             </TouchableOpacity>
           </View>
 
-          {/* Titre */}
-          <View style={styles.headerContainer}>
-            <Text style={styles.title}>Welcome Back!</Text>
-            <Text style={styles.subtitle}>Log in to continue your journey.</Text>
-          </View>
+          {/* Form */}
+          <View style={styles.form}>
+            {activeTab === 'signup' && (
+              <View style={styles.inputContainer}>
+                <Ionicons name="person-outline" size={20} color="#FFFFFF80" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Pseudo"
+                  placeholderTextColor="#FFFFFF80"
+                  value={pseudo}
+                  onChangeText={setPseudo}
+                />
+              </View>
+            )}
 
-          {/* Formulaire */}
-          <View style={styles.formContainer}>
             <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color="#A1A1AA" style={styles.inputIcon} />
+              <Ionicons name="mail-outline" size={20} color="#FFFFFF80" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="Email"
-                placeholderTextColor="#A1A1AA"
+                placeholderTextColor="#FFFFFF80"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                autoComplete="email"
               />
             </View>
 
             <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed-outline" size={20} color="#A1A1AA" style={styles.inputIcon} />
+              <Ionicons name="lock-closed-outline" size={20} color="#FFFFFF80" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Password"
-                placeholderTextColor="#A1A1AA"
+                placeholder="Mot de passe"
+                placeholderTextColor="#FFFFFF80"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
-                autoComplete="password"
+                secureTextEntry={!showPassword}
               />
-            </View>
-
-            {/* Remember me & Forgot password */}
-            <View style={styles.optionsContainer}>
-              <TouchableOpacity 
-                style={styles.rememberContainer}
-                onPress={() => setRememberMe(!rememberMe)}
+              <TouchableOpacity
+                style={styles.eyeIcon}
+                onPress={() => setShowPassword(!showPassword)}
               >
-                <View style={[styles.checkbox, rememberMe && styles.checkboxActive]}>
-                  {rememberMe && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
-                </View>
-                <Text style={styles.rememberText}>Remember me</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={() => router.push('/(auth)/forgot-password')}>
-                <Text style={styles.forgotText}>Forgot your password?</Text>
+                <Ionicons 
+                  name={showPassword ? "eye" : "eye-off"} 
+                  size={20} 
+                  color="#FFFFFF80" 
+                />
               </TouchableOpacity>
             </View>
 
-            {/* Bouton de connexion */}
-            <TouchableOpacity
-              style={[styles.loginButton, loading && styles.loginButtonDisabled]}
-              onPress={handleLogin}
+            {activeTab === 'signup' && (
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={20} color="#FFFFFF80" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Confirmer le mot de passe"
+                  placeholderTextColor="#FFFFFF80"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirmPassword}
+                />
+                <TouchableOpacity
+                  style={styles.eyeIcon}
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  <Ionicons 
+                    name={showConfirmPassword ? "eye" : "eye-off"} 
+                    size={20} 
+                    color="#FFFFFF80" 
+                  />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {activeTab === 'login' && (
+              <View style={styles.rememberContainer}>
+                <TouchableOpacity
+                  style={styles.checkbox}
+                  onPress={() => setRememberMe(!rememberMe)}
+                >
+                  <Ionicons 
+                    name={rememberMe ? "checkbox" : "square-outline"} 
+                    size={20} 
+                    color="#FFFFFF" 
+                  />
+                  <Text style={styles.rememberText}>Se souvenir de moi</Text>
+                </TouchableOpacity>
+                <Link href="/(auth)/forgot-password" asChild>
+                  <TouchableOpacity>
+                    <Text style={styles.forgotText}>Mot de passe oublié ?</Text>
+                  </TouchableOpacity>
+                </Link>
+              </View>
+            )}
+
+            <TouchableOpacity 
+              style={[styles.authButton, loading && styles.disabledButton]}
+              onPress={handleAuth}
               disabled={loading}
             >
               <LinearGradient
-                colors={['#EC4899', '#F97316']}
+                colors={['#FF8E53', '#FF6B35']}
                 style={styles.buttonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
               >
-                {loading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.loginButtonText}>Login</Text>
-                )}
+                <Text style={styles.authButtonText}>
+                  {loading ? 'Chargement...' : activeTab === 'login' ? 'Se connecter' : 'S\'inscrire'}
+                </Text>
               </LinearGradient>
             </TouchableOpacity>
-
-            {/* Lien vers inscription */}
-            <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-              <Text style={styles.signupText}>
-                Don't have an account? <Text style={styles.signupLink}>Sign up</Text>
-              </Text>
-            </TouchableOpacity>
           </View>
-        </KeyboardAvoidingView>
+        </View>
       </LinearGradient>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -174,129 +204,102 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 30,
     justifyContent: 'center',
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    marginBottom: 40,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.2)',
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 15,
-    alignItems: 'center',
-  },
-  activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: '#F97316',
-  },
-  tabText: {
-    fontSize: 16,
-    color: '#A1A1AA',
-    fontWeight: '500',
-  },
-  activeTabText: {
-    color: '#F97316',
-    fontWeight: '600',
-  },
-  headerContainer: {
-    alignItems: 'center',
-    marginBottom: 40,
+    paddingHorizontal: 30,
   },
   title: {
     fontSize: 32,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 10,
     textAlign: 'center',
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#A1A1AA',
+    color: '#FFFFFF80',
     textAlign: 'center',
+    marginBottom: 40,
   },
-  formContainer: {
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 25,
+    padding: 4,
+    marginBottom: 30,
+  },
+  tab: {
     flex: 1,
-    maxHeight: 400,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 20,
+  },
+  activeTab: {
+    backgroundColor: '#FF8E53',
+  },
+  tabText: {
+    color: '#FFFFFF80',
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  activeTabText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  form: {
+    gap: 20,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 15,
-    marginBottom: 20,
-    paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    height: 50,
   },
   inputIcon: {
-    marginRight: 12,
+    marginRight: 10,
   },
   input: {
     flex: 1,
-    paddingVertical: 18,
-    fontSize: 16,
     color: '#FFFFFF',
+    fontSize: 16,
   },
-  optionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 30,
+  eyeIcon: {
+    padding: 5,
   },
   rememberContainer: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
   checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: '#A1A1AA',
-    marginRight: 8,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxActive: {
-    backgroundColor: '#F97316',
-    borderColor: '#F97316',
+    gap: 8,
   },
   rememberText: {
-    color: '#A1A1AA',
+    color: '#FFFFFF',
     fontSize: 14,
   },
   forgotText: {
-    color: '#A1A1AA',
+    color: '#FF8E53',
     fontSize: 14,
+    fontWeight: '500',
   },
-  loginButton: {
-    borderRadius: 15,
-    marginBottom: 30,
-    overflow: 'hidden',
+  authButton: {
+    marginTop: 10,
   },
-  loginButtonDisabled: {
+  disabledButton: {
     opacity: 0.7,
   },
   buttonGradient: {
-    paddingVertical: 18,
+    paddingVertical: 15,
+    borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  loginButtonText: {
+  authButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '600',
-  },
-  signupText: {
-    textAlign: 'center',
-    color: '#A1A1AA',
-    fontSize: 16,
-  },
-  signupLink: {
-    color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
 }); 

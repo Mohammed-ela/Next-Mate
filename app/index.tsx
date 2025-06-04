@@ -1,11 +1,11 @@
 import { useRouter } from 'expo-router';
 import { useEffect } from 'react';
 
-export default function RegisterScreen() {
+export default function Index() {
   const router = useRouter();
 
   useEffect(() => {
-    // Rediriger immédiatement vers login car les tabs Login/Signup sont maintenant unifiés
+    // Rediriger immédiatement vers la page de connexion
     router.replace('/(auth)/login');
   }, []);
 

@@ -1,156 +1,99 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
-import { sendPasswordResetEmail } from 'firebase/auth';
+import { Link, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import {
-    ActivityIndicator,
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from 'react-native';
-import { auth } from '../../config/firebase';
+import { Alert, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
+  const { resetPassword, loading } = useAuth();
+  const router = useRouter();
 
   const handleResetPassword = async () => {
     if (!email) {
-      Alert.alert('Erreur', 'Veuillez entrer votre adresse email');
+      Alert.alert('Erreur', 'Veuillez saisir votre email');
       return;
     }
 
-    // Validation simple de l'email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      Alert.alert('Erreur', 'Veuillez entrer une adresse email valide');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      await sendPasswordResetEmail(auth, email);
-      setEmailSent(true);
+    const result = await resetPassword(email);
+    if (result.success) {
       Alert.alert(
-        'Email envoyé',
-        'Un lien de réinitialisation a été envoyé à votre adresse email. Vérifiez votre boîte de réception et vos spams.',
+        'Succès', 
+        'Un email de réinitialisation a été envoyé à votre adresse.',
         [
           {
             text: 'OK',
-            onPress: () => router.back(),
-          },
+            onPress: () => router.back()
+          }
         ]
       );
-    } catch (error: any) {
-      let errorMessage = 'Une erreur est survenue';
-      switch (error.code) {
-        case 'auth/user-not-found':
-          errorMessage = 'Aucun compte trouvé avec cet email';
-          break;
-        case 'auth/invalid-email':
-          errorMessage = 'Adresse email invalide';
-          break;
-        case 'auth/too-many-requests':
-          errorMessage = 'Trop de tentatives. Réessayez plus tard';
-          break;
-        default:
-          errorMessage = 'Erreur lors de l\'envoi de l\'email';
-      }
-      Alert.alert('Erreur', errorMessage);
-    } finally {
-      setLoading(false);
+    } else {
+      Alert.alert('Erreur', result.error || 'Erreur lors de l\'envoi de l\'email');
     }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+      <StatusBar hidden />
       <LinearGradient
-        colors={['#6B46C1', '#9333EA', '#A855F7']}
+        colors={['#2F0C4D', '#471573']}
         style={styles.gradient}
       >
-        <KeyboardAvoidingView
-          style={styles.content}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          {/* Header avec bouton retour */}
-          <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.backButton}
-              onPress={() => router.back()}
-            >
-              <Ionicons name="chevron-back" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Forgot Password</Text>
-            <View style={styles.placeholder} />
-          </View>
+        <View style={styles.content}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
 
-          {/* Contenu principal */}
-          <View style={styles.mainContent}>
-            <Text style={styles.title}>Enter your email</Text>
-            <Text style={styles.subtitle}>
-              We'll send you a link to reset your password.
-            </Text>
+          <Text style={styles.title}>Mot de passe oublié ?</Text>
+          <Text style={styles.subtitle}>
+            Entrez votre adresse email et nous vous enverrons un lien pour réinitialiser votre mot de passe.
+          </Text>
 
-            {/* Champ email */}
+          <View style={styles.form}>
             <View style={styles.inputContainer}>
-              <Ionicons name="mail-outline" size={20} color="#A1A1AA" style={styles.inputIcon} />
+              <Ionicons name="mail-outline" size={20} color="#FFFFFF80" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="Email"
-                placeholderTextColor="#A1A1AA"
+                placeholderTextColor="#FFFFFF80"
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                autoComplete="email"
-                editable={!emailSent}
               />
             </View>
 
-            {/* Bouton d'envoi */}
-            <TouchableOpacity
-              style={[styles.sendButton, (loading || emailSent) && styles.sendButtonDisabled]}
+            <TouchableOpacity 
+              style={[styles.resetButton, loading && styles.disabledButton]}
               onPress={handleResetPassword}
-              disabled={loading || emailSent}
+              disabled={loading}
             >
               <LinearGradient
-                colors={['#EC4899', '#F97316']}
+                colors={['#FF8E53', '#FF6B35']}
                 style={styles.buttonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
               >
-                {loading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.sendButtonText}>
-                    {emailSent ? 'Email Sent' : 'Send'}
-                  </Text>
-                )}
+                <Text style={styles.resetButtonText}>
+                  {loading ? 'Envoi...' : 'Envoyer le lien'}
+                </Text>
               </LinearGradient>
             </TouchableOpacity>
-
-            {/* Message de succès */}
-            {emailSent && (
-              <View style={styles.successContainer}>
-                <Ionicons name="checkmark-circle-outline" size={48} color="#10B981" />
-                <Text style={styles.successTitle}>Email sent successfully!</Text>
-                <Text style={styles.successText}>
-                  Check your inbox and follow the instructions to reset your password.
-                </Text>
-              </View>
-            )}
           </View>
-        </KeyboardAvoidingView>
+
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>Vous vous souvenez de votre mot de passe ? </Text>
+            <Link href="/(auth)/login" asChild>
+              <TouchableOpacity>
+                <Text style={styles.loginText}>Se connecter</Text>
+              </TouchableOpacity>
+            </Link>
+          </View>
+        </View>
       </LinearGradient>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -163,102 +106,78 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    justifyContent: 'center',
     paddingHorizontal: 30,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 20,
-    paddingBottom: 30,
-  },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  placeholder: {
-    width: 40,
-  },
-  mainContent: {
-    flex: 1,
-    justifyContent: 'center',
-    maxHeight: 500,
+    position: 'absolute',
+    top: 60,
+    left: 30,
+    zIndex: 1,
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 10,
-    textAlign: 'left',
+    textAlign: 'center',
+    marginBottom: 15,
   },
   subtitle: {
     fontSize: 16,
-    color: '#A1A1AA',
+    color: '#FFFFFF80',
+    textAlign: 'center',
     marginBottom: 40,
-    textAlign: 'left',
+    lineHeight: 24,
+  },
+  form: {
+    gap: 30,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 15,
-    marginBottom: 30,
-    paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    height: 50,
   },
   inputIcon: {
-    marginRight: 12,
+    marginRight: 10,
   },
   input: {
     flex: 1,
-    paddingVertical: 18,
-    fontSize: 16,
     color: '#FFFFFF',
+    fontSize: 16,
   },
-  sendButton: {
-    borderRadius: 15,
-    marginBottom: 30,
-    overflow: 'hidden',
+  resetButton: {
+    marginTop: 10,
   },
-  sendButtonDisabled: {
+  disabledButton: {
     opacity: 0.7,
   },
   buttonGradient: {
-    paddingVertical: 18,
+    paddingVertical: 15,
+    borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  sendButtonText: {
+  resetButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '600',
-  },
-  successContainer: {
-    alignItems: 'center',
-    paddingVertical: 20,
-  },
-  successTitle: {
-    fontSize: 20,
     fontWeight: 'bold',
-    color: '#10B981',
-    marginTop: 15,
-    marginBottom: 10,
-    textAlign: 'center',
   },
-  successText: {
-    fontSize: 16,
-    color: '#A1A1AA',
-    textAlign: 'center',
-    lineHeight: 24,
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 40,
+    flexWrap: 'wrap',
+  },
+  footerText: {
+    color: '#FFFFFF80',
+    fontSize: 14,
+  },
+  loginText: {
+    color: '#FF8E53',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 }); 
