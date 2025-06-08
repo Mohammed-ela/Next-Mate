@@ -4,7 +4,7 @@ import { Link, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { LoginWithGoogleButton } from '../../components/LoginWithGoogleButton';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '../../context/AuthContext';
 
 export default function LoginScreen() {
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login');
@@ -18,12 +18,12 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
-  const { signIn, signUp, loading } = useAuth();
+  const { login, register, loading } = useAuth();
   const router = useRouter();
 
   const handleAuth = async () => {
     if (activeTab === 'login') {
-      const result = await signIn(email, password);
+      const result = await login(email, password);
       if (result.success) {
         router.replace('/(tabs)');
       } else {
@@ -34,7 +34,7 @@ export default function LoginScreen() {
         Alert.alert('Erreur', 'Les mots de passe ne correspondent pas');
         return;
       }
-      const result = await signUp(email, password, pseudo);
+      const result = await register(email, password, pseudo);
       if (result.success) {
         router.replace('/(tabs)');
       } else {

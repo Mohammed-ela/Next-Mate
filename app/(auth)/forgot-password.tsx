@@ -3,11 +3,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Link, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { useAuth } from '../../hooks/useAuth';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
-  const { resetPassword, loading } = useAuth();
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleResetPassword = async () => {
@@ -16,8 +15,13 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
-    const result = await resetPassword(email);
-    if (result.success) {
+    setLoading(true);
+    try {
+      const { sendPasswordResetEmail } = await import('firebase/auth');
+      const { auth } = await import('../../config/firebase');
+      
+      await sendPasswordResetEmail(auth, email);
+      
       Alert.alert(
         'Succès', 
         'Un email de réinitialisation a été envoyé à votre adresse.',
@@ -28,8 +32,11 @@ export default function ForgotPasswordScreen() {
           }
         ]
       );
-    } else {
-      Alert.alert('Erreur', result.error || 'Erreur lors de l\'envoi de l\'email');
+    } catch (error: any) {
+      Alert.alert('Erreur', 'Erreur lors de l\'envoi de l\'email');
+      console.error('Reset password error:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
