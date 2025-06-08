@@ -3,6 +3,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Link, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import { Alert, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { LoginWithGoogleButton } from '../../components/LoginWithGoogleButton';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function LoginScreen() {
@@ -41,6 +42,8 @@ export default function LoginScreen() {
       }
     }
   };
+
+
 
   return (
     <View style={styles.container}>
@@ -188,6 +191,19 @@ export default function LoginScreen() {
                 </Text>
               </LinearGradient>
             </TouchableOpacity>
+
+            {/* Séparateur */}
+            <View style={styles.separatorContainer}>
+              <View style={styles.separatorLine} />
+              <Text style={styles.separatorText}>ou</Text>
+              <View style={styles.separatorLine} />
+            </View>
+
+            {/* Bouton Google */}
+            <LoginWithGoogleButton 
+              onSuccess={() => router.replace('/(tabs)')}
+              style={styles.googleButton}
+            />
           </View>
         </View>
       </LinearGradient>
@@ -301,5 +317,44 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  separatorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  separatorLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  separatorText: {
+    color: '#FFFFFF80',
+    fontSize: 14,
+    marginHorizontal: 15,
+  },
+  googleButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: 15,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  googleButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  googleButtonText: {
+    color: '#1F2937',
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 
