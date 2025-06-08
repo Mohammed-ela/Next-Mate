@@ -3,16 +3,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from "expo-router";
 import React, { useState } from 'react';
 import {
-  FlatList,
-  Modal,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    FlatList,
+    Modal,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
+import { useAuth } from '../../context/AuthContext';
 
 const POPULAR_GAMES = [
   { id: '1', name: 'Valorant', icon: '🎯', platform: 'PC' },
@@ -37,8 +38,11 @@ export default function HomeScreen() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [pseudo, setPseudo] = useState('GamerX_Pro');
 
-  const handleSignOut = () => {
-    router.replace("/(auth)/login");
+  const { logout } = useAuth();
+
+  const handleSignOut = async () => {
+    await logout();
+    // La redirection se fera automatiquement via _layout.tsx
   };
 
   const addGame = (game: any) => {
