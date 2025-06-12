@@ -12,6 +12,7 @@ import {
     TouchableOpacity,
     View,
 } from 'react-native';
+import { useTheme } from '../../context/ThemeContext';
 
 interface SettingItem {
   id: string;
@@ -26,27 +27,7 @@ interface SettingItem {
 
 export default function ParametresScreen() {
   const [notifications, setNotifications] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const [locationEnabled, setLocationEnabled] = useState(true);
-  const [privateMode, setPrivateMode] = useState(false);
-
-  const handleLogout = () => {
-    Alert.alert(
-      'Déconnexion',
-      'Êtes-vous sûr de vouloir vous déconnecter ?',
-      [
-        { text: 'Annuler', style: 'cancel' },
-        { 
-          text: 'Déconnexion', 
-          style: 'destructive',
-          onPress: () => {
-            // Logique de déconnexion
-            router.replace('/login');
-          }
-        }
-      ]
-    );
-  };
+  const { isDarkMode, toggleTheme, colors } = useTheme();
 
   const handleDeleteAccount = () => {
     Alert.alert(
@@ -80,8 +61,6 @@ export default function ParametresScreen() {
     );
   };
 
-
-
   const appSettings: SettingItem[] = [
     {
       id: 'notifications',
@@ -93,31 +72,13 @@ export default function ParametresScreen() {
       onToggle: setNotifications,
     },
     {
-      id: 'sound',
-      title: 'Sons',
-      subtitle: 'Sons de notification',
-      icon: 'volume-high',
+      id: 'dark-mode',
+      title: 'Mode sombre',
+      subtitle: 'Interface sombre ou claire',
+      icon: 'moon',
       type: 'toggle',
-      value: soundEnabled,
-      onToggle: setSoundEnabled,
-    },
-    {
-      id: 'location',
-      title: 'Localisation',
-      subtitle: 'Partager votre position',
-      icon: 'location',
-      type: 'toggle',
-      value: locationEnabled,
-      onToggle: setLocationEnabled,
-    },
-    {
-      id: 'private-mode',
-      title: 'Mode privé',
-      subtitle: 'Masquer votre statut en ligne',
-      icon: 'eye-off',
-      type: 'toggle',
-      value: privateMode,
-      onToggle: setPrivateMode,
+      value: isDarkMode,
+      onToggle: toggleTheme,
     },
   ];
 
@@ -175,13 +136,6 @@ export default function ParametresScreen() {
 
   const dangerSettings: SettingItem[] = [
     {
-      id: 'logout',
-      title: 'Déconnexion',
-      icon: 'log-out',
-      type: 'danger',
-      onPress: handleLogout,
-    },
-    {
       id: 'delete-account',
       title: 'Supprimer le compte',
       subtitle: 'Action irréversible',
@@ -196,6 +150,7 @@ export default function ParametresScreen() {
       key={item.id}
       style={[
         styles.settingItem,
+        { borderBottomColor: colors.border },
         item.type === 'danger' && styles.dangerItem
       ]}
       onPress={item.onPress}
@@ -204,23 +159,25 @@ export default function ParametresScreen() {
       <View style={styles.settingLeft}>
         <View style={[
           styles.iconContainer,
+          { backgroundColor: colors.surface },
           item.type === 'danger' && styles.dangerIcon
         ]}>
           <Ionicons 
             name={item.icon as any} 
             size={22} 
-            color={item.type === 'danger' ? '#EF4444' : '#FFFFFF'} 
+            color={item.type === 'danger' ? '#EF4444' : colors.text} 
           />
         </View>
         <View style={styles.settingTextContainer}>
           <Text style={[
             styles.settingTitle,
+            { color: colors.text },
             item.type === 'danger' && styles.dangerText
           ]}>
             {item.title}
           </Text>
           {item.subtitle && (
-            <Text style={styles.settingSubtitle}>{item.subtitle}</Text>
+            <Text style={[styles.settingSubtitle, { color: colors.textSecondary }]}>{item.subtitle}</Text>
           )}
         </View>
       </View>
@@ -230,14 +187,14 @@ export default function ParametresScreen() {
           <Switch
             value={item.value}
             onValueChange={item.onToggle}
-            trackColor={{ false: '#374151', true: '#FF8E53' }}
+            trackColor={{ false: '#374151', true: colors.secondary }}
             thumbColor={item.value ? '#FFFFFF' : '#9CA3AF'}
           />
         ) : (
           <Ionicons 
             name="chevron-forward" 
             size={20} 
-            color={item.type === 'danger' ? '#EF4444' : '#FFFFFF60'} 
+            color={item.type === 'danger' ? '#EF4444' : colors.textSecondary} 
           />
         )}
       </View>
@@ -246,8 +203,8 @@ export default function ParametresScreen() {
 
   const renderSection = (title: string, items: SettingItem[]) => (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionContent}>
+      <Text style={[styles.sectionTitle, { color: colors.text }]}>{title}</Text>
+      <View style={[styles.sectionContent, { backgroundColor: colors.card }]}>
         {items.map(renderSettingItem)}
       </View>
     </View>
@@ -255,14 +212,14 @@ export default function ParametresScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
       <LinearGradient
-        colors={['#2F0C4D', '#471573']}
+        colors={colors.gradient as [string, string]}
         style={styles.gradient}
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Paramètres ⚙️</Text>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Paramètres ⚙️</Text>
         </View>
 
         <ScrollView 
@@ -270,33 +227,16 @@ export default function ParametresScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* User Info */}
-          <View style={styles.userSection}>
-            <View style={styles.userInfo}>
-              <LinearGradient
-                colors={['#FF8E53', '#FF6B35']}
-                style={styles.userAvatar}
-              >
-                <Text style={styles.userAvatarText}>🎮</Text>
-              </LinearGradient>
-              <View style={styles.userDetails}>
-                <Text style={styles.userName}>Gaming_Pro</Text>
-                <Text style={styles.userEmail}>pro@nextmate.app</Text>
-              </View>
-            </View>
-          </View>
-
-                     {renderSection('⚙️ Application', appSettings)}
+          {renderSection('⚙️ Application', appSettings)}
           {renderSection('🔒 Confidentialité', privacySettings)}
           {renderSection('🆘 Support', supportSettings)}
+          {renderSection('⚠️ Zone de danger', dangerSettings)}
           
           {/* Version */}
           <View style={styles.versionSection}>
-            <Text style={styles.versionText}>NextMate v1.0.0</Text>
-            <Text style={styles.versionSubtext}>Made with 💜 for gamers</Text>
+            <Text style={[styles.versionText, { color: colors.textSecondary }]}>NextMate v1.0.0</Text>
+            <Text style={[styles.versionSubtext, { color: colors.textSecondary }]}>Made with 💜 for gamers</Text>
           </View>
-
-          {renderSection('⚠️ Zone de danger', dangerSettings)}
         </ScrollView>
       </LinearGradient>
     </View>
@@ -317,7 +257,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    color: '#FFFFFF',
     fontSize: 24,
     fontWeight: 'bold',
   },
@@ -326,7 +265,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingBottom: 100,
+    paddingBottom: 20,
   },
   userSection: {
     marginBottom: 30,
@@ -366,14 +305,12 @@ const styles = StyleSheet.create({
     marginBottom: 25,
   },
   sectionTitle: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 12,
     paddingHorizontal: 4,
   },
   sectionContent: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 16,
     overflow: 'hidden',
   },
@@ -383,7 +320,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   dangerItem: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -397,7 +333,6 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -409,7 +344,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   settingTitle: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 2,
@@ -418,7 +352,6 @@ const styles = StyleSheet.create({
     color: '#EF4444',
   },
   settingSubtitle: {
-    color: '#FFFFFF60',
     fontSize: 13,
   },
   settingRight: {
@@ -430,12 +363,10 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   versionText: {
-    color: '#FFFFFF80',
     fontSize: 14,
     fontWeight: '500',
   },
   versionSubtext: {
-    color: '#FFFFFF60',
     fontSize: 12,
     marginTop: 4,
   },

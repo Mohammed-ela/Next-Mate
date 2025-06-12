@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
     FlatList,
+    Modal,
     StatusBar,
     StyleSheet,
     Text,
@@ -11,6 +12,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { useTheme } from '../../context/ThemeContext';
 
 interface Message {
   id: string;
@@ -101,8 +103,11 @@ const MOCK_CONVERSATIONS: Conversation[] = [
 ];
 
 export default function ConversationsScreen() {
+  const { colors, isDarkMode } = useTheme();
   const [conversations, setConversations] = useState<Conversation[]>(MOCK_CONVERSATIONS);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
 
   const formatTimeAgo = (date: Date) => {
     const now = new Date();
@@ -114,7 +119,7 @@ export default function ConversationsScreen() {
     return `${Math.floor(diffInMinutes / 1440)}j`;
   };
 
-  const openChat = (conversationId: string) => {
+  const openConversation = (conversationId: string) => {
     // Marquer comme lu
     setConversations(prev => 
       prev.map(conv => 
@@ -132,98 +137,113 @@ export default function ConversationsScreen() {
     conv.participants[0].name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const renderConversationItem = ({ item }: { item: Conversation }) => {
-    const participant = item.participants[0];
-    
-    return (
-      <TouchableOpacity
-        style={styles.conversationItem}
-        onPress={() => openChat(item.id)}
-        activeOpacity={0.8}
-      >
-        <View style={styles.avatarContainer}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarEmoji}>{participant.avatar}</Text>
-          </View>
-          {participant.isOnline && <View style={styles.onlineIndicator} />}
-          {item.unreadCount > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={styles.unreadText}>{item.unreadCount}</Text>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.conversationContent}>
-          <View style={styles.conversationHeader}>
-            <Text style={styles.participantName}>{participant.name}</Text>
-            <Text style={styles.timestamp}>
-              {formatTimeAgo(item.lastMessage.timestamp)}
-            </Text>
-          </View>
-
-          <View style={styles.conversationPreview}>
-            <View style={styles.lastMessageContainer}>
-              <Text 
-                style={[
-                  styles.lastMessage,
-                  item.unreadCount > 0 && styles.unreadMessage
-                ]}
-                numberOfLines={1}
-              >
-                {item.lastMessage.content}
-              </Text>
-            </View>
-            
-            {participant.currentGame && (
-              <View style={styles.gameStatus}>
-                <Ionicons name="game-controller" size={12} color="#FF8E53" />
-                <Text style={styles.currentGame}>{participant.currentGame}</Text>
-              </View>
-            )}
-          </View>
-
-          {item.gameInCommon && (
-            <View style={styles.gameInCommon}>
-              <Ionicons name="people" size={12} color="#8B5CF6" />
-              <Text style={styles.gameInCommonText}>{item.gameInCommon}</Text>
-            </View>
-          )}
-        </View>
-
-        <Ionicons name="chevron-forward" size={16} color="#FFFFFF40" />
-      </TouchableOpacity>
-    );
+  const deleteConversation = (conversationId: string) => {
+    setConversationToDelete(conversationId);
+    setShowDeleteModal(true);
   };
+
+  const confirmDeleteConversation = () => {
+    if (conversationToDelete) {
+      setConversations(prev => prev.filter(conv => conv.id !== conversationToDelete));
+      setShowDeleteModal(false);
+      setConversationToDelete(null);
+    }
+  };
+
+  const cancelDeleteConversation = () => {
+    setShowDeleteModal(false);
+    setConversationToDelete(null);
+  };
+
+  const renderConversationItem = ({ item }: { item: Conversation }) => (
+    <TouchableOpacity
+      style={[styles.conversationItem, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}
+      onPress={() => openConversation(item.id)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.avatarContainer}>
+        <LinearGradient
+          colors={['#FF8E53', '#FF6B35']}
+          style={styles.avatar}
+        >
+          <Text style={styles.avatarText}>{item.participants[0].avatar}</Text>
+        </LinearGradient>
+        {item.participants[0].isOnline && <View style={styles.onlineIndicator} />}
+        {item.unreadCount > 0 && (
+          <View style={[styles.unreadBadge, { backgroundColor: colors.primary }]}>
+            <Text style={styles.unreadText}>{item.unreadCount}</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.conversationContent}>
+        <View style={styles.conversationHeader}>
+          <Text style={[styles.participantName, { color: colors.text }]}>{item.participants[0].name}</Text>
+          <Text style={[styles.timestamp, { color: colors.textSecondary }]}>{formatTimeAgo(item.lastMessage.timestamp)}</Text>
+        </View>
+        
+        <View style={styles.messagePreview}>
+          <Text style={[styles.lastMessage, { color: colors.textSecondary }]} numberOfLines={1}>
+            {item.lastMessage.content}
+          </Text>
+          {item.participants[0].currentGame && (
+            <View style={styles.gameStatus}>
+              <Ionicons name="game-controller" size={12} color="#FF8E53" />
+              <Text style={[styles.currentGame, { color: colors.textSecondary }]}>{item.participants[0].currentGame}</Text>
+            </View>
+          )}
+        </View>
+
+        {item.gameInCommon && (
+          <View style={styles.gameInCommon}>
+            <Ionicons name="people" size={12} color="#8B5CF6" />
+            <Text style={[styles.gameInCommonText, { color: colors.textSecondary }]}>{item.gameInCommon}</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Bouton de suppression */}
+      <TouchableOpacity 
+        style={styles.deleteButton}
+        onPress={(e) => {
+          e.stopPropagation();
+          deleteConversation(item.id);
+        }}
+      >
+        <Ionicons name="trash-outline" size={20} color="#EF4444" />
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
       <LinearGradient
-        colors={['#2F0C4D', '#471573']}
+        colors={colors.gradient as [string, string]}
         style={styles.gradient}
       >
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Messages 💬</Text>
-          <TouchableOpacity style={styles.headerButton}>
-            <Ionicons name="add" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Messages 💬</Text>
+          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
+            {MOCK_CONVERSATIONS.length} conversation{MOCK_CONVERSATIONS.length > 1 ? 's' : ''}
+          </Text>
         </View>
 
         {/* Barre de recherche */}
         <View style={styles.searchContainer}>
-          <View style={styles.searchBar}>
-            <Ionicons name="search" size={20} color="#FFFFFF80" />
+          <View style={[styles.searchBar, { backgroundColor: colors.surface }]}>
+            <Ionicons name="search" size={20} color={colors.textSecondary} />
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: colors.text }]}
               placeholder="Rechercher un mate..."
-              placeholderTextColor="#FFFFFF80"
+              placeholderTextColor={colors.textSecondary}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close" size={20} color="#FFFFFF80" />
+                <Ionicons name="close" size={20} color={colors.textSecondary} />
               </TouchableOpacity>
             )}
           </View>
@@ -242,10 +262,10 @@ export default function ConversationsScreen() {
         ) : (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateIcon}>💬</Text>
-            <Text style={styles.emptyStateTitle}>
+            <Text style={[styles.emptyStateTitle, { color: colors.text }]}>
               {searchQuery ? 'Aucun résultat' : 'Aucune conversation'}
             </Text>
-            <Text style={styles.emptyStateSubtitle}>
+            <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
               {searchQuery 
                 ? 'Essayez un autre nom de mate'
                 : 'Commencez à chercher des mates pour démarrer une conversation !'
@@ -265,15 +285,64 @@ export default function ConversationsScreen() {
           </View>
         )}
 
-        {/* Floating Action Button pour nouveau message */}
-        <TouchableOpacity style={styles.fab}>
-          <LinearGradient
-            colors={['#FF8E53', '#FF6B35']}
-            style={styles.fabGradient}
-          >
-            <Ionicons name="add" size={24} color="#FFFFFF" />
-          </LinearGradient>
-        </TouchableOpacity>
+        {/* Modal de suppression personnalisée NextMate */}
+        <Modal
+          visible={showDeleteModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={cancelDeleteConversation}
+        >
+          <View style={styles.deleteModalOverlay}>
+            <View style={styles.deleteModalContent}>
+              <View style={styles.deleteModalHeader}>
+                <Text style={styles.deleteModalTitle}>🗑️ Supprimer la conversation</Text>
+                <TouchableOpacity 
+                  style={styles.deleteCloseButton}
+                  onPress={cancelDeleteConversation}
+                >
+                  <Ionicons name="close" size={24} color="#FFFFFF80" />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.deleteModalBody}>
+                <View style={styles.deleteIconContainer}>
+                  <Text style={{ fontSize: 48 }}>🗑️</Text>
+                </View>
+                
+                <Text style={styles.deleteMainText}>
+                  Supprimer cette conversation ?
+                </Text>
+                
+                <Text style={styles.deleteSubText}>
+                  Cette action est irréversible. Tous les messages de cette conversation seront définitivement supprimés.
+                </Text>
+                
+                <View style={styles.deleteButtonsContainer}>
+                  <TouchableOpacity 
+                    style={styles.deleteCancelButton}
+                    onPress={cancelDeleteConversation}
+                  >
+                    <Text style={styles.deleteCancelButtonText}>Annuler</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.deleteConfirmButton}
+                    onPress={confirmDeleteConversation}
+                  >
+                    <LinearGradient
+                      colors={['#EF4444', '#DC2626']}
+                      style={styles.deleteConfirmGradient}
+                    >
+                      <Ionicons name="trash" size={18} color="#FFFFFF" />
+                      <Text style={styles.deleteConfirmButtonText}>Supprimer</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
       </LinearGradient>
     </View>
   );
@@ -299,10 +368,9 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
   },
-  headerButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 20,
-    padding: 8,
+  headerSubtitle: {
+    color: '#FFFFFF80',
+    fontSize: 16,
   },
   searchContainer: {
     paddingHorizontal: 20,
@@ -311,7 +379,6 @@ const styles = StyleSheet.create({
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 12,
     paddingHorizontal: 15,
     height: 50,
@@ -319,7 +386,6 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    color: '#FFFFFF',
     fontSize: 16,
   },
   conversationsList: {
@@ -331,24 +397,23 @@ const styles = StyleSheet.create({
   conversationItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     gap: 12,
+    borderBottomWidth: 1,
   },
   avatarContainer: {
     position: 'relative',
   },
-  avatarCircle: {
+  avatar: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarEmoji: {
+  avatarText: {
     fontSize: 24,
   },
   onlineIndicator: {
@@ -397,21 +462,13 @@ const styles = StyleSheet.create({
     color: '#FFFFFF60',
     fontSize: 12,
   },
-  conversationPreview: {
+  messagePreview: {
     gap: 4,
-  },
-  lastMessageContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   lastMessage: {
     color: '#FFFFFF80',
     fontSize: 14,
     flex: 1,
-  },
-  unreadMessage: {
-    color: '#FFFFFF',
-    fontWeight: '500',
   },
   gameStatus: {
     flexDirection: 'row',
@@ -479,24 +536,118 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  fab: {
-    position: 'absolute',
-    bottom: 30,
-    right: 20,
+  deleteButton: {
+    padding: 8,
+    marginLeft: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  // Styles pour la modal de suppression
+  deleteModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(47, 12, 77, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  deleteModalContent: {
+    backgroundColor: '#2F0C4D',
+    borderRadius: 20,
+    width: '100%',
+    maxWidth: 400,
+    borderWidth: 2,
+    borderColor: '#EF4444',
     shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 10,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 20,
+  },
+  deleteModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    paddingBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FFFFFF20',
+  },
+  deleteModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  deleteCloseButton: {
+    padding: 5,
+  },
+  deleteModalBody: {
+    padding: 20,
+    paddingTop: 10,
+  },
+  deleteIconContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  deleteMainText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 15,
+    lineHeight: 24,
+  },
+  deleteSubText: {
+    color: '#FFFFFF80',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 25,
+    lineHeight: 20,
+  },
+  deleteButtonsContainer: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  deleteCancelButton: {
+    flex: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    padding: 15,
+    borderRadius: 25,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#FFFFFF40',
+  },
+  deleteCancelButtonText: {
+    color: '#FFFFFF80',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  deleteConfirmButton: {
+    flex: 1,
+    borderRadius: 25,
+  },
+  deleteConfirmGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 15,
+    borderRadius: 25,
+    gap: 8,
+    shadowColor: '#EF4444',
     shadowOffset: {
       width: 0,
       height: 4,
     },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 8,
   },
-  fabGradient: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
+  deleteConfirmButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 }); 

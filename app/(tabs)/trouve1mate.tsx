@@ -9,8 +9,9 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
+    View
 } from 'react-native';
+import { useTheme } from '../../context/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
@@ -79,51 +80,47 @@ const generateRandomMate = (id: string): Mate => {
 };
 
 export default function Trouve1MateScreen() {
-  const [dailyMates, setDailyMates] = useState<Mate[]>([]);
+  const [mates, setMates] = useState<Mate[]>([]);
   const [refreshing, setRefreshing] = useState(false);
-
-  // Générer 10 mates aléatoires
-  const generateDailyMates = () => {
-    const mates = Array.from({ length: 10 }, (_, index) => 
-      generateRandomMate(`mate_${Date.now()}_${index}`)
-    );
-    setDailyMates(mates);
-  };
+  const { colors, isDarkMode } = useTheme();
 
   useEffect(() => {
-    generateDailyMates();
+    generateMates();
   }, []);
 
-  const handleRefresh = () => {
+  const generateMates = () => {
+    const newMates = Array.from({ length: 10 }, (_, index) => 
+      generateRandomMate(`mate_${Date.now()}_${index}`)
+    );
+    setMates(newMates);
+  };
+
+  const refreshMates = () => {
     setRefreshing(true);
     setTimeout(() => {
-      generateDailyMates();
+      generateMates();
       setRefreshing(false);
     }, 1000);
   };
 
   const connectToMate = (mate: Mate) => {
     Alert.alert(
-      'Connexion',
-      `Voulez-vous envoyer une demande de mate à ${mate.name} ?`,
-      [
-        { text: 'Annuler', style: 'cancel' },
-        { 
-          text: 'Envoyer', 
-          onPress: () => {
-            Alert.alert('✅ Demande envoyée !', `Votre demande a été envoyée à ${mate.name}`);
-          }
-        }
-      ]
+      '🎮 Connexion envoyée !',
+      `Tu as envoyé une demande de connexion à ${mate.name}. Si vous matchez, vous pourrez commencer à chatter !`,
+      [{ text: 'Cool !', style: 'default' }]
     );
   };
 
   const openProfile = (mate: Mate) => {
-    Alert.alert('Profil', `Affichage du profil de ${mate.name}`);
+    Alert.alert(
+      `Profil de ${mate.name}`,
+      `🎮 Jeux: ${mate.games.join(', ')}\n⏰ Dispo: ${mate.availability.join(', ')}\n📍 Distance: ${mate.distance}km\n\n"${mate.bio}"`,
+      [{ text: 'Fermer', style: 'default' }]
+    );
   };
 
   const renderMateCard = ({ item }: { item: Mate }) => (
-    <View style={styles.mateCard}>
+    <View style={[styles.mateCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <LinearGradient
         colors={['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']}
         style={styles.cardGradient}
@@ -139,12 +136,12 @@ export default function Trouve1MateScreen() {
           
           <View style={styles.mateInfo}>
             <View style={styles.nameRow}>
-              <Text style={styles.mateName}>{item.name}</Text>
-              <Text style={styles.mateAge}>{item.age} ans</Text>
+              <Text style={[styles.mateName, { color: colors.text }]}>{item.name}</Text>
+              <Text style={[styles.mateAge, { color: colors.textSecondary }]}>{item.age} ans</Text>
             </View>
-            <Text style={styles.mateDistance}>📍 {item.distance} km</Text>
+            <Text style={[styles.mateDistance, { color: colors.textSecondary }]}>📍 {item.distance} km</Text>
             <View style={styles.matchContainer}>
-              <Text style={styles.matchText}>{item.matchPercentage}% match</Text>
+              <Text style={[styles.matchText, { color: colors.textSecondary }]}>{item.matchPercentage}% match</Text>
               <View style={styles.matchBar}>
                 <View style={[styles.matchFill, { width: `${item.matchPercentage}%` }]} />
               </View>
@@ -153,15 +150,15 @@ export default function Trouve1MateScreen() {
         </View>
 
         {/* Bio */}
-        <Text style={styles.mateBio}>{item.bio}</Text>
+        <Text style={[styles.mateBio, { color: colors.textSecondary }]}>{item.bio}</Text>
 
         {/* Jeux */}
         <View style={styles.gamesSection}>
-          <Text style={styles.sectionLabel}>🎮 Jeux favoris</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>🎮 Jeux favoris</Text>
           <View style={styles.gamesList}>
             {item.games.map((game, index) => (
-              <View key={index} style={styles.gameTag}>
-                <Text style={styles.gameText}>{game}</Text>
+              <View key={index} style={[styles.gameTag, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.gameText, { color: colors.textSecondary }]}>{game}</Text>
               </View>
             ))}
           </View>
@@ -169,11 +166,11 @@ export default function Trouve1MateScreen() {
 
         {/* Disponibilités */}
         <View style={styles.availabilitySection}>
-          <Text style={styles.sectionLabel}>⏰ Disponibilités</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>⏰ Disponibilités</Text>
           <View style={styles.timesList}>
             {item.availability.map((time, index) => (
-              <View key={index} style={styles.timeTag}>
-                <Text style={styles.timeText}>{time}</Text>
+              <View key={index} style={[styles.timeTag, { backgroundColor: colors.surface }]}>
+                <Text style={[styles.timeText, { color: colors.textSecondary }]}>{time}</Text>
               </View>
             ))}
           </View>
@@ -182,11 +179,11 @@ export default function Trouve1MateScreen() {
         {/* Actions */}
         <View style={styles.actionsRow}>
           <TouchableOpacity 
-            style={styles.profileButton}
+            style={[styles.profileButton, { backgroundColor: colors.surface }]}
             onPress={() => openProfile(item)}
           >
-            <Ionicons name="person" size={20} color="#FFFFFF80" />
-            <Text style={styles.profileText}>Profil</Text>
+            <Ionicons name="person" size={20} color={colors.textSecondary} />
+            <Text style={[styles.profileText, { color: colors.textSecondary }]}>Profil</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -208,44 +205,28 @@ export default function Trouve1MateScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
       <LinearGradient
-        colors={['#2F0C4D', '#471573']}
+        colors={colors.gradient as [string, string]}
         style={styles.gradient}
       >
-        {/* Toolbar */}
-        <View style={styles.toolbar}>
-          <View style={styles.toolbarPlaceholder} />
-          
-          <View style={styles.titleContainer}>
-            <Text style={styles.toolbarTitle}>T1M</Text>
-            <Text style={styles.toolbarSubtitle}>Trouve1Mate</Text>
-          </View>
-          
-          <TouchableOpacity 
-            style={styles.toolbarButton}
-            onPress={handleRefresh}
-          >
-            <Ionicons name="refresh" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Info du jour */}
-        <View style={styles.dailyInfo}>
-          <Text style={styles.dailyText}>🎯 10 nouveaux mates aujourd'hui</Text>
-          <Text style={styles.dailySubtext}>Sélection personnalisée pour vous</Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={[styles.headerTitle, { color: colors.text }]}>Trouve ton Mate ! 🎮</Text>
+          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
+            Découvre des gamers près de chez toi
+          </Text>
         </View>
 
         {/* Liste des mates */}
         <FlatList
-          data={dailyMates}
-          keyExtractor={(item) => item.id}
+          data={mates}
           renderItem={renderMateCard}
-          style={styles.matesList}
-          contentContainerStyle={styles.matesContent}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
           refreshing={refreshing}
-          onRefresh={handleRefresh}
+          onRefresh={refreshMates}
         />
       </LinearGradient>
     </View>
@@ -258,6 +239,22 @@ const styles = StyleSheet.create({
   },
   gradient: {
     flex: 1,
+  },
+  header: {
+    padding: 20,
+    paddingTop: 60,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    marginTop: 4,
+  },
+  listContainer: {
+    padding: 20,
+    paddingBottom: 100,
   },
   toolbar: {
     flexDirection: 'row',
