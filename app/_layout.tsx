@@ -1,6 +1,8 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+import { ThemeProvider } from '../context/ThemeContext';
+import { UserProfileProvider } from '../context/UserProfileContext';
 
 // 🔇 Supprime le warning Firebase AsyncStorage spécifique
 const originalWarn = console.warn;
@@ -54,7 +56,11 @@ function RootLayoutNav() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <RootLayoutNav />
+      <UserProfileProvider>
+        <ThemeProvider>
+          <RootLayoutNav />
+        </ThemeProvider>
+      </UserProfileProvider>
     </AuthProvider>
   );
 }
