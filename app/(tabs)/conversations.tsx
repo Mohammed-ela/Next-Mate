@@ -12,99 +12,12 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { useConversations, type Conversation } from '../../context/ConversationsContext';
 import { useTheme } from '../../context/ThemeContext';
-
-interface Message {
-  id: string;
-  senderId: string;
-  content: string;
-  timestamp: Date;
-  type: 'text' | 'game_invite' | 'system';
-}
-
-interface Conversation {
-  id: string;
-  participants: {
-    id: string;
-    name: string;
-    avatar: string;
-    isOnline: boolean;
-    currentGame?: string;
-  }[];
-  lastMessage: Message;
-  unreadCount: number;
-  gameInCommon?: string;
-}
-
-const MOCK_CONVERSATIONS: Conversation[] = [
-  {
-    id: '1',
-    participants: [
-      {
-        id: '2',
-        name: 'Alex_Gaming',
-        avatar: '🎮',
-        isOnline: true,
-        currentGame: 'Valorant',
-      },
-    ],
-    lastMessage: {
-      id: 'm1',
-      senderId: '2',
-      content: 'Tu veux faire une partie de Valorant ce soir ?',
-      timestamp: new Date(Date.now() - 1000 * 60 * 15), // Il y a 15 min
-      type: 'text',
-    },
-    unreadCount: 2,
-    gameInCommon: 'Valorant',
-  },
-  {
-    id: '2',
-    participants: [
-      {
-        id: '3',
-        name: 'ProGamer_Sarah',
-        avatar: '⚔️',
-        isOnline: false,
-        currentGame: undefined,
-      },
-    ],
-    lastMessage: {
-      id: 'm2',
-      senderId: '3',
-      content: 'GG ! On refait ça demain ?',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // Il y a 2h
-      type: 'text',
-    },
-    unreadCount: 0,
-    gameInCommon: 'League of Legends',
-  },
-  {
-    id: '3',
-    participants: [
-      {
-        id: '4',
-        name: 'Mike_FPS',
-        avatar: '🔫',
-        isOnline: true,
-        currentGame: 'CS2',
-      },
-    ],
-    lastMessage: {
-      id: 'm3',
-      senderId: '1', // Moi
-      content: 'Salut ! Tu joues souvent à CS2 ?',
-      timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // Il y a 1 jour
-      type: 'text',
-    },
-    unreadCount: 1,
-    gameInCommon: 'CS2',
-  },
-];
 
 export default function ConversationsScreen() {
   const { colors, isDarkMode } = useTheme();
-  const [conversations, setConversations] = useState<Conversation[]>(MOCK_CONVERSATIONS);
+  const { conversations, markAsRead, deleteConversation: removeConversation } = useConversations();
   const [searchQuery, setSearchQuery] = useState('');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
@@ -121,13 +34,7 @@ export default function ConversationsScreen() {
 
   const openConversation = (conversationId: string) => {
     // Marquer comme lu
-    setConversations(prev => 
-      prev.map(conv => 
-        conv.id === conversationId 
-          ? { ...conv, unreadCount: 0 }
-          : conv
-      )
-    );
+    markAsRead(conversationId);
     
     // Ouvrir le chat individuel
     router.push(`/chat/${conversationId}`);
@@ -144,7 +51,7 @@ export default function ConversationsScreen() {
 
   const confirmDeleteConversation = () => {
     if (conversationToDelete) {
-      setConversations(prev => prev.filter(conv => conv.id !== conversationToDelete));
+      removeConversation(conversationToDelete);
       setShowDeleteModal(false);
       setConversationToDelete(null);
     }
@@ -226,7 +133,7 @@ export default function ConversationsScreen() {
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Messages 💬</Text>
           <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-            {MOCK_CONVERSATIONS.length} conversation{MOCK_CONVERSATIONS.length > 1 ? 's' : ''}
+            {conversations.length} conversation{conversations.length > 1 ? 's' : ''}
           </Text>
         </View>
 

@@ -1,16 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  FlatList,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
+import { useConversations } from '../../context/ConversationsContext';
 import { useTheme } from '../../context/ThemeContext';
 
 const { width } = Dimensions.get('window');
@@ -83,6 +85,7 @@ export default function Trouve1MateScreen() {
   const [mates, setMates] = useState<Mate[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const { colors, isDarkMode } = useTheme();
+  const { createConversation } = useConversations();
 
   useEffect(() => {
     generateMates();
@@ -103,12 +106,44 @@ export default function Trouve1MateScreen() {
     }, 1000);
   };
 
-  const connectToMate = (mate: Mate) => {
-    Alert.alert(
-      '🎮 Connexion envoyée !',
-      `Tu as envoyé une demande de connexion à ${mate.name}. Si vous matchez, vous pourrez commencer à chatter !`,
-      [{ text: 'Cool !', style: 'default' }]
-    );
+  const connectToMate = async (mate: Mate) => {
+    try {
+      // Trouver un jeu en commun (simulation)
+      const commonGames = mate.games.filter(game => 
+        ['Valorant', 'League of Legends', 'CS2', 'FIFA'].includes(game)
+      );
+      const gameInCommon = commonGames.length > 0 ? commonGames[0] : undefined;
+
+      // Créer le participant pour la conversation
+      const participant = {
+        id: mate.id,
+        name: mate.name,
+        avatar: mate.avatar,
+        isOnline: mate.isOnline,
+        currentGame: mate.games[0], // Premier jeu comme jeu actuel
+      };
+
+      // Créer la conversation (ou récupérer l'existante)
+      const conversationId = await createConversation(participant, gameInCommon);
+      
+      if (conversationId) {
+        // Rediriger directement vers le chat
+        router.push(`/chat/${conversationId}`);
+      } else {
+        Alert.alert(
+          '❌ Erreur',
+          'Impossible de créer la conversation. Réessaie plus tard.',
+          [{ text: 'OK', style: 'default' }]
+        );
+      }
+    } catch (error) {
+      console.error('❌ Erreur connexion mate:', error);
+      Alert.alert(
+        '❌ Erreur',
+        'Une erreur est survenue lors de la connexion.',
+        [{ text: 'OK', style: 'default' }]
+      );
+    }
   };
 
   const openProfile = (mate: Mate) => {
