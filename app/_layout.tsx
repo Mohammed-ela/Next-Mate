@@ -1,6 +1,7 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+import { ConversationsProvider } from '../context/ConversationsContext';
 import { ThemeProvider } from '../context/ThemeContext';
 import { UserProfileProvider } from '../context/UserProfileContext';
 
@@ -57,9 +58,11 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <UserProfileProvider>
-        <ThemeProvider>
-          <RootLayoutNav />
-        </ThemeProvider>
+        <ConversationsProvider>
+          <ThemeProvider>
+            <RootLayoutNav />
+          </ThemeProvider>
+        </ConversationsProvider>
       </UserProfileProvider>
     </AuthProvider>
   );
