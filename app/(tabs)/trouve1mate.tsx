@@ -3,133 +3,116 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  FlatList,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
+import { useAuth } from '../../context/AuthContext';
 import { useConversations } from '../../context/ConversationsContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useUserProfile } from '../../context/UserProfileContext';
+import { getDiscoveryUsers, type PlatformUser } from '../../services/userService';
 
 const { width } = Dimensions.get('window');
 
-interface Mate {
-  id: string;
-  name: string;
-  avatar: string;
-  age: number;
-  games: string[];
-  availability: string[];
-  bio: string;
-  distance: number;
-  isOnline: boolean;
-  matchPercentage: number;
-}
-
-const AVAILABLE_GAMES = ['Valorant', 'League of Legends', 'CS2', 'FIFA', 'Fortnite', 'Rocket League', 'Overwatch', 'Call of Duty', 'Apex Legends', 'PUBG'];
-const AVAILABLE_TIMES = ['9h-12h', '12h-15h', '15h-18h', '18h-21h', '21h-00h', 'Week-end'];
-const GAMING_AVATARS = ['🎮', '⚔️', '🔫', '⚽', '🏎️', '🎯', '🏆', '🎲', '🕹️', '🎪'];
-const GAMING_NAMES = [
-  'ProGamer_Alex', 'Sarah_FPS', 'Mike_Legend', 'Luna_Gaming', 'Zex_Master',
-  'Nina_Clutch', 'Tom_Noob', 'Eva_Pro', 'Max_Beast', 'Lily_Gamer',
-  'Jake_Sniper', 'Amy_Carry', 'Leo_Tank', 'Zoe_Support', 'Sam_Rusher'
-];
-
-const generateRandomMate = (id: string): Mate => {
-  const name = GAMING_NAMES[Math.floor(Math.random() * GAMING_NAMES.length)];
-  const avatar = GAMING_AVATARS[Math.floor(Math.random() * GAMING_AVATARS.length)];
-  const age = 18 + Math.floor(Math.random() * 12); // 18-30 ans
-  
-  // 1-4 jeux aléatoires
-  const gameCount = 1 + Math.floor(Math.random() * 4);
-  const games = Array.from({ length: gameCount }, () => 
-    AVAILABLE_GAMES[Math.floor(Math.random() * AVAILABLE_GAMES.length)]
-  ).filter((game, index, arr) => arr.indexOf(game) === index);
-  
-  // 1-3 créneaux aléatoires
-  const availabilityCount = 1 + Math.floor(Math.random() * 3);
-  const availability = Array.from({ length: availabilityCount }, () => 
-    AVAILABLE_TIMES[Math.floor(Math.random() * AVAILABLE_TIMES.length)]
-  ).filter((time, index, arr) => arr.indexOf(time) === index);
-  
-  const bios = [
-    'Toujours prêt pour une partie ! 🎮',
-    'Je cherche des teammates sérieux',
-    'Gaming addict depuis toujours',
-    'On fait du ranked ensemble ?',
-    'Team player avant tout 💪',
-    'Disponible pour du tryhard',
-    'Chill gaming et fun garanti',
-    'Pro player en devenir 🏆'
-  ];
-  
-  return {
-    id,
-    name,
-    avatar,
-    age,
-    games,
-    availability,
-    bio: bios[Math.floor(Math.random() * bios.length)],
-    distance: 1 + Math.floor(Math.random() * 50), // 1-50 km
-    isOnline: Math.random() > 0.3, // 70% chance d'être en ligne
-    matchPercentage: 60 + Math.floor(Math.random() * 40), // 60-100%
-  };
-};
-
 export default function Trouve1MateScreen() {
-  const [mates, setMates] = useState<Mate[]>([]);
+  const [users, setUsers] = useState<PlatformUser[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { colors, isDarkMode } = useTheme();
   const { createConversation } = useConversations();
+  const { user: currentUser } = useAuth();
+  const { profile } = useUserProfile();
 
   useEffect(() => {
-    generateMates();
-  }, []);
+    loadUsers();
+  }, [currentUser]);
 
-  const generateMates = () => {
-    const newMates = Array.from({ length: 10 }, (_, index) => 
-      generateRandomMate(`mate_${Date.now()}_${index}`)
-    );
-    setMates(newMates);
-  };
+  const loadUsers = async () => {
+    if (!currentUser?.uid) {
+      setLoading(false);
+      return;
+    }
 
-  const refreshMates = () => {
-    setRefreshing(true);
-    setTimeout(() => {
-      generateMates();
-      setRefreshing(false);
-    }, 1000);
-  };
-
-  const connectToMate = async (mate: Mate) => {
     try {
-      // Trouver un jeu en commun (simulation)
-      const commonGames = mate.games.filter(game => 
-        ['Valorant', 'League of Legends', 'CS2', 'FIFA'].includes(game)
+      setError(null);
+      console.log('🔍 Chargement des utilisateurs de la plateforme...');
+      
+      // Récupérer les jeux de l'utilisateur actuel pour un meilleur matching
+      const currentUserGameNames = profile?.games?.map(game => game.name) || [];
+      
+      const platformUsers = await getDiscoveryUsers(currentUser.uid, 10, currentUserGameNames);
+      setUsers(platformUsers);
+      
+      if (platformUsers.length === 0) {
+        setError('Aucun utilisateur trouvé pour le moment');
+      }
+      
+    } catch (err) {
+      console.error('❌ Erreur chargement utilisateurs:', err);
+      setError('Erreur lors du chargement des utilisateurs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const refreshUsers = async () => {
+    setRefreshing(true);
+    await loadUsers();
+    setRefreshing(false);
+  };
+
+  const connectToUser = async (targetUser: PlatformUser) => {
+    try {
+      console.log('🔄 Tentative de connexion avec:', targetUser.name);
+      
+      // Vérifications de sécurité
+      if (!targetUser.id || !targetUser.name) {
+        console.error('❌ Données utilisateur incomplètes:', targetUser);
+        Alert.alert('❌ Erreur', 'Profil utilisateur incomplet');
+        return;
+      }
+
+      // Trouver un jeu en commun en utilisant les vrais jeux de l'utilisateur
+      const currentUserGames = profile?.games || [];
+      const currentUserGameNames = currentUserGames.map(game => game.name).filter(Boolean);
+      const targetUserGames = Array.isArray(targetUser.games) ? targetUser.games.filter(Boolean) : [];
+      
+      const commonGames = targetUserGames.filter(game => 
+        currentUserGameNames.includes(game)
       );
       const gameInCommon = commonGames.length > 0 ? commonGames[0] : undefined;
 
-      // Créer le participant pour la conversation
+      console.log('🎮 Jeux en commun trouvés:', commonGames);
+
+      // Créer le participant pour la conversation avec des valeurs par défaut sécurisées
       const participant = {
-        id: mate.id,
-        name: mate.name,
-        avatar: mate.avatar,
-        isOnline: mate.isOnline,
-        currentGame: mate.games[0], // Premier jeu comme jeu actuel
+        id: targetUser.id,
+        name: targetUser.name,
+        avatar: targetUser.avatar || '🎮',
+        isImageAvatar: targetUser.isImageAvatar,
+        isOnline: targetUser.isOnline || false,
+        currentGame: targetUser.currentlyPlaying || targetUserGames[0] || undefined,
       };
+
+      console.log('👤 Participant créé:', participant);
 
       // Créer la conversation (ou récupérer l'existante)
       const conversationId = await createConversation(participant, gameInCommon);
       
       if (conversationId) {
+        console.log('✅ Conversation créée/trouvée:', conversationId);
         // Rediriger directement vers le chat
         router.push(`/chat/${conversationId}`);
       } else {
+        console.error('❌ Échec création conversation');
         Alert.alert(
           '❌ Erreur',
           'Impossible de créer la conversation. Réessaie plus tard.',
@@ -137,7 +120,7 @@ export default function Trouve1MateScreen() {
         );
       }
     } catch (error) {
-      console.error('❌ Erreur connexion mate:', error);
+      console.error('❌ Erreur connexion utilisateur:', error);
       Alert.alert(
         '❌ Erreur',
         'Une erreur est survenue lors de la connexion.',
@@ -146,15 +129,24 @@ export default function Trouve1MateScreen() {
     }
   };
 
-  const openProfile = (mate: Mate) => {
+  const openProfile = (targetUser: PlatformUser) => {
+    const profileInfo = [
+      `🎮 Jeux: ${targetUser.games.length > 0 ? targetUser.games.join(', ') : 'Aucun jeu renseigné'}`,
+      targetUser.availability.length > 0 ? `⏰ Dispo: ${targetUser.availability.join(', ')}` : '',
+      targetUser.distance ? `📍 Distance: ${targetUser.distance}km` : '',
+      targetUser.age ? `🎂 Âge: ${targetUser.age} ans` : '',
+      targetUser.location ? `📍 Localisation: ${targetUser.location}` : '',
+      targetUser.currentlyPlaying ? `🎮 Joue actuellement: ${targetUser.currentlyPlaying}` : '',
+    ].filter(Boolean).join('\n');
+
     Alert.alert(
-      `Profil de ${mate.name}`,
-      `🎮 Jeux: ${mate.games.join(', ')}\n⏰ Dispo: ${mate.availability.join(', ')}\n📍 Distance: ${mate.distance}km\n\n"${mate.bio}"`,
+      `Profil de ${targetUser.name}`,
+      `${profileInfo}\n\n"${targetUser.bio || 'Aucune bio disponible'}"`,
       [{ text: 'Fermer', style: 'default' }]
     );
   };
 
-  const renderMateCard = ({ item }: { item: Mate }) => (
+  const renderUserCard = ({ item }: { item: PlatformUser }) => (
     <View style={[styles.mateCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <LinearGradient
         colors={['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']}
@@ -164,7 +156,15 @@ export default function Trouve1MateScreen() {
         <View style={styles.mateHeader}>
           <View style={styles.avatarSection}>
             <View style={[styles.avatarCircle, { backgroundColor: item.isOnline ? 'rgba(16, 185, 129, 0.2)' : 'rgba(107, 114, 128, 0.2)' }]}>
-              <Text style={styles.avatarEmoji}>{item.avatar}</Text>
+              {item.isImageAvatar ? (
+                <Image 
+                  source={{ uri: item.avatar }} 
+                  style={styles.avatarImage}
+                  defaultSource={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' }}
+                />
+              ) : (
+                <Text style={styles.avatarEmoji}>{item.avatar}</Text>
+              )}
             </View>
             {item.isOnline && <View style={styles.onlineIndicator} />}
           </View>
@@ -172,44 +172,72 @@ export default function Trouve1MateScreen() {
           <View style={styles.mateInfo}>
             <View style={styles.nameRow}>
               <Text style={[styles.mateName, { color: colors.text }]}>{item.name}</Text>
-              <Text style={[styles.mateAge, { color: colors.textSecondary }]}>{item.age} ans</Text>
+              {item.age && <Text style={[styles.mateAge, { color: colors.textSecondary }]}>{item.age} ans</Text>}
             </View>
-            <Text style={[styles.mateDistance, { color: colors.textSecondary }]}>📍 {item.distance} km</Text>
-            <View style={styles.matchContainer}>
-              <Text style={[styles.matchText, { color: colors.textSecondary }]}>{item.matchPercentage}% match</Text>
-              <View style={styles.matchBar}>
-                <View style={[styles.matchFill, { width: `${item.matchPercentage}%` }]} />
+            {item.distance && (
+              <Text style={[styles.mateDistance, { color: colors.textSecondary }]}>📍 {item.distance} km</Text>
+            )}
+            {item.matchPercentage && (
+              <View style={styles.matchContainer}>
+                <Text style={[styles.matchText, { color: colors.textSecondary }]}>{item.matchPercentage}% match</Text>
+                <View style={styles.matchBar}>
+                  <View style={[styles.matchFill, { width: `${item.matchPercentage}%` }]} />
+                </View>
               </View>
-            </View>
+            )}
           </View>
         </View>
 
         {/* Bio */}
-        <Text style={[styles.mateBio, { color: colors.textSecondary }]}>{item.bio}</Text>
+        <Text style={[styles.mateBio, { color: colors.textSecondary }]}>{item.bio || 'Aucune bio disponible'}</Text>
 
         {/* Jeux */}
-        <View style={styles.gamesSection}>
-          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>🎮 Jeux favoris</Text>
-          <View style={styles.gamesList}>
-            {item.games.map((game, index) => (
-              <View key={index} style={[styles.gameTag, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.gameText, { color: colors.textSecondary }]}>{game}</Text>
-              </View>
-            ))}
+        {item.games.length > 0 && (
+          <View style={styles.gamesSection}>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>🎮 Jeux favoris</Text>
+            <View style={styles.gamesList}>
+              {item.games.slice(0, 4).map((game, index) => (
+                <View key={index} style={[styles.gameTag, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.gameText, { color: colors.textSecondary }]}>{game}</Text>
+                </View>
+              ))}
+              {item.games.length > 4 && (
+                <View style={[styles.gameTag, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.gameText, { color: colors.textSecondary }]}>+{item.games.length - 4}</Text>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Disponibilités */}
-        <View style={styles.availabilitySection}>
-          <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>⏰ Disponibilités</Text>
-          <View style={styles.timesList}>
-            {item.availability.map((time, index) => (
-              <View key={index} style={[styles.timeTag, { backgroundColor: colors.surface }]}>
-                <Text style={[styles.timeText, { color: colors.textSecondary }]}>{time}</Text>
-              </View>
-            ))}
+        {item.availability.length > 0 && (
+          <View style={styles.availabilitySection}>
+            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>⏰ Disponibilités</Text>
+            <View style={styles.timesList}>
+              {item.availability.slice(0, 3).map((time, index) => (
+                <View key={index} style={[styles.timeTag, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.timeText, { color: colors.textSecondary }]}>{time}</Text>
+                </View>
+              ))}
+              {item.availability.length > 3 && (
+                <View style={[styles.timeTag, { backgroundColor: colors.surface }]}>
+                  <Text style={[styles.timeText, { color: colors.textSecondary }]}>+{item.availability.length - 3}</Text>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
+        )}
+
+        {/* Statut de jeu actuel */}
+        {item.currentlyPlaying && (
+          <View style={styles.currentGameSection}>
+            <Ionicons name="game-controller" size={16} color="#FF8E53" />
+            <Text style={[styles.currentGameText, { color: colors.textSecondary }]}>
+              Joue à {item.currentlyPlaying}
+            </Text>
+          </View>
+        )}
 
         {/* Actions */}
         <View style={styles.actionsRow}>
@@ -223,7 +251,7 @@ export default function Trouve1MateScreen() {
           
           <TouchableOpacity 
             style={styles.connectButton}
-            onPress={() => connectToMate(item)}
+            onPress={() => connectToUser(item)}
           >
             <LinearGradient
               colors={['#FF8E53', '#FF6B35']}
@@ -238,6 +266,43 @@ export default function Trouve1MateScreen() {
     </View>
   );
 
+  // État de chargement
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+        <LinearGradient colors={colors.gradient as [string, string]} style={styles.gradient}>
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingEmoji}>🎮</Text>
+            <Text style={[styles.loadingText, { color: colors.text }]}>Chargement des mates...</Text>
+          </View>
+        </LinearGradient>
+      </View>
+    );
+  }
+
+  // État d'erreur
+  if (error && users.length === 0) {
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+        <LinearGradient colors={colors.gradient as [string, string]} style={styles.gradient}>
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorEmoji}>😔</Text>
+            <Text style={[styles.errorTitle, { color: colors.text }]}>Oups !</Text>
+            <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={loadUsers}>
+              <LinearGradient colors={['#FF8E53', '#FF6B35']} style={styles.retryGradient}>
+                <Ionicons name="refresh" size={20} color="#FFFFFF" />
+                <Text style={styles.retryText}>Réessayer</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
@@ -249,19 +314,28 @@ export default function Trouve1MateScreen() {
         <View style={styles.header}>
           <Text style={[styles.headerTitle, { color: colors.text }]}>Trouve ton Mate ! 🎮</Text>
           <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-            Découvre des gamers près de chez toi
+            {users.length} gamer{users.length > 1 ? 's' : ''} disponible{users.length > 1 ? 's' : ''}
           </Text>
         </View>
 
-        {/* Liste des mates */}
+        {/* Liste des utilisateurs */}
         <FlatList
-          data={mates}
-          renderItem={renderMateCard}
+          data={users}
+          renderItem={renderUserCard}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
           refreshing={refreshing}
-          onRefresh={refreshMates}
+          onRefresh={refreshUsers}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>🎮</Text>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>Aucun mate trouvé</Text>
+              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                Tire vers le bas pour actualiser ou reviens plus tard !
+              </Text>
+            </View>
+          }
         />
       </LinearGradient>
     </View>
@@ -291,67 +365,81 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 100,
   },
-  toolbar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-  },
-  toolbarButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 20,
-    padding: 12,
-    width: 48,
-    height: 48,
+  // États de chargement et d'erreur
+  loadingContainer: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 40,
   },
-  toolbarPlaceholder: {
-    width: 48,
-    height: 48,
+  loadingEmoji: {
+    fontSize: 60,
+    marginBottom: 20,
   },
-  titleContainer: {
+  loadingText: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
+    padding: 40,
   },
-  toolbarTitle: {
-    color: '#FFFFFF',
+  errorEmoji: {
+    fontSize: 60,
+    marginBottom: 20,
+  },
+  errorTitle: {
     fontSize: 24,
     fontWeight: 'bold',
+    marginBottom: 10,
   },
-  toolbarSubtitle: {
-    color: '#FFFFFF80',
-    fontSize: 12,
-    marginTop: 2,
+  errorText: {
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 30,
+    lineHeight: 24,
   },
-  dailyInfo: {
-    backgroundColor: 'rgba(255, 142, 83, 0.1)',
-    marginHorizontal: 20,
+  retryButton: {
     borderRadius: 12,
-    padding: 15,
-    alignItems: 'center',
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 142, 83, 0.3)',
   },
-  dailyText: {
-    color: '#FF8E53',
+  retryGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12,
+    gap: 8,
+  },
+  retryText: {
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
-  dailySubtext: {
-    color: '#FFFFFF80',
-    fontSize: 12,
-    marginTop: 4,
-  },
-  matesList: {
+  emptyContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+    minHeight: 300,
   },
-  matesContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 100,
+  emptyEmoji: {
+    fontSize: 60,
+    marginBottom: 20,
   },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  emptyText: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  // Cartes utilisateurs
   mateCard: {
     marginBottom: 20,
     borderRadius: 16,
@@ -398,16 +486,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   mateName: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
   },
   mateAge: {
-    color: '#FFFFFF80',
     fontSize: 14,
   },
   mateDistance: {
-    color: '#FFFFFF60',
     fontSize: 14,
     marginTop: 4,
   },
@@ -415,7 +500,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   matchText: {
-    color: '#FF8E53',
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 4,
@@ -431,7 +515,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF8E53',
   },
   mateBio: {
-    color: '#FFFFFF90',
     fontSize: 14,
     fontStyle: 'italic',
     marginBottom: 15,
@@ -441,7 +524,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   sectionLabel: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 8,
@@ -463,7 +545,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   availabilitySection: {
-    marginBottom: 20,
+    marginBottom: 15,
   },
   timesList: {
     flexDirection: 'row',
@@ -481,6 +563,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
+  currentGameSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+    gap: 8,
+  },
+  currentGameText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
   actionsRow: {
     flexDirection: 'row',
     gap: 12,
@@ -496,7 +588,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   profileText: {
-    color: '#FFFFFF80',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -516,5 +607,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  avatarImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
   },
 }); 

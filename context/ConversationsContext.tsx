@@ -1,14 +1,14 @@
 import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  setDoc,
-  where
+    addDoc,
+    collection,
+    deleteDoc,
+    doc,
+    getDocs,
+    onSnapshot,
+    query,
+    serverTimestamp,
+    setDoc,
+    where
 } from 'firebase/firestore';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { db } from '../config/firebase';
@@ -27,6 +27,7 @@ interface Participant {
   id: string;
   name: string;
   avatar: string;
+  isImageAvatar?: boolean; // Indique si l'avatar est une image ou un emoji
   isOnline: boolean;
   currentGame?: string;
 }
@@ -109,16 +110,18 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
           [user.uid]: {
             name: user.email?.split('@')[0] || 'Moi',
             avatar: '🎮',
+            isImageAvatar: false,
             isOnline: true,
           },
           [participant.id]: {
             name: participant.name,
             avatar: participant.avatar,
+            isImageAvatar: participant.isImageAvatar || false,
             isOnline: participant.isOnline,
             currentGame: participant.currentGame,
           },
         },
-        gameInCommon,
+        ...(gameInCommon && { gameInCommon }),
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -239,6 +242,7 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
                   id: otherParticipantId,
                   name: participantDetails.name,
                   avatar: participantDetails.avatar,
+                  isImageAvatar: participantDetails.isImageAvatar || false,
                   isOnline: participantDetails.isOnline || false,
                   currentGame: participantDetails.currentGame,
                 }],

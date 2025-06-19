@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
     FlatList,
+    Image,
     Modal,
     StatusBar,
     StyleSheet,
@@ -73,7 +74,15 @@ export default function ConversationsScreen() {
           colors={['#FF8E53', '#FF6B35']}
           style={styles.avatar}
         >
-          <Text style={styles.avatarText}>{item.participants[0].avatar}</Text>
+          {(item.participants[0].isImageAvatar || item.participants[0].avatar.startsWith('file:///') || item.participants[0].avatar.startsWith('http')) ? (
+            <Image 
+              source={{ uri: item.participants[0].avatar }} 
+              style={styles.avatarImage}
+              defaultSource={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' }}
+            />
+          ) : (
+            <Text style={styles.avatarText}>{item.participants[0].avatar}</Text>
+          )}
         </LinearGradient>
         {item.participants[0].isOnline && <View style={styles.onlineIndicator} />}
         {item.unreadCount > 0 && (
@@ -322,6 +331,11 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontSize: 24,
+  },
+  avatarImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
   },
   onlineIndicator: {
     position: 'absolute',

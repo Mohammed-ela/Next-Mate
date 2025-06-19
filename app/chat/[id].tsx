@@ -3,16 +3,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import {
-    Alert,
-    FlatList,
-    KeyboardAvoidingView,
-    Platform,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  FlatList,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useConversations } from '../../context/ConversationsContext';
@@ -151,7 +152,15 @@ function ChatContent({ conversationId }: { conversationId: string }) {
         {!isMyMessage && (
           <View style={styles.avatarContainer}>
             {showAvatar ? (
-              <Text style={styles.avatarText}>{participant?.avatar}</Text>
+              (participant?.isImageAvatar || participant?.avatar.startsWith('file:///') || participant?.avatar.startsWith('http')) ? (
+                <Image 
+                  source={{ uri: participant.avatar }} 
+                  style={styles.avatarImage}
+                  defaultSource={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' }}
+                />
+              ) : (
+                <Text style={styles.avatarText}>{participant?.avatar}</Text>
+              )
             ) : (
               <View style={styles.avatarPlaceholder} />
             )}
@@ -206,7 +215,15 @@ function ChatContent({ conversationId }: { conversationId: string }) {
           
           <View style={styles.headerInfo}>
             <View style={styles.headerAvatar}>
-              <Text style={styles.headerAvatarText}>{participant.avatar}</Text>
+              {(participant.isImageAvatar || participant.avatar.startsWith('file:///') || participant.avatar.startsWith('http')) ? (
+                <Image 
+                  source={{ uri: participant.avatar }} 
+                  style={styles.headerAvatarImage}
+                  defaultSource={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' }}
+                />
+              ) : (
+                <Text style={styles.headerAvatarText}>{participant.avatar}</Text>
+              )}
               {participant.isOnline && <View style={styles.onlineIndicator} />}
             </View>
             
@@ -314,6 +331,11 @@ const styles = StyleSheet.create({
     position: 'relative',
     marginRight: 12,
   },
+  headerAvatarImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
   headerAvatarText: {
     fontSize: 32,
   },
@@ -368,8 +390,10 @@ const styles = StyleSheet.create({
     marginRight: 8,
     marginBottom: 4,
   },
-  avatarText: {
-    fontSize: 24,
+  avatarImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
   avatarPlaceholder: {
     width: 32,
@@ -506,5 +530,8 @@ const styles = StyleSheet.create({
   systemMessageText: {
     fontSize: 16,
     lineHeight: 22,
+  },
+  avatarText: {
+    fontSize: 24,
   },
 }); 
