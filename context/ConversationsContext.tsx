@@ -3,6 +3,7 @@ import {
     collection,
     deleteDoc,
     doc,
+    getDoc,
     getDocs,
     onSnapshot,
     query,
@@ -52,6 +53,7 @@ interface ConversationsContextType {
   markAsRead: (conversationId: string) => void;
   deleteConversation: (conversationId: string) => Promise<void>;
   refreshConversations: () => Promise<void>;
+  syncAvatars: () => Promise<void>;
 }
 
 // 🏗️ Context avec valeurs par défaut
@@ -64,6 +66,7 @@ const ConversationsContext = createContext<ConversationsContextType>({
   markAsRead: () => {},
   deleteConversation: async () => {},
   refreshConversations: async () => {},
+  syncAvatars: async () => {},
 });
 
 // 🎣 Hook personnalisé
@@ -205,6 +208,70 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
     console.log('🔄 Conversations synchronisées automatiquement');
   };
 
+  // 🔄 Forcer la synchronisation des avatars (utile après changement de photo)
+  const syncAvatars = async () => {
+    if (!user?.uid) return;
+    
+    console.log('🔄 Synchronisation forcée des avatars...');
+    
+    try {
+      // Récupérer toutes les conversations actuelles
+      const conversationsQuery = query(
+        collection(db, 'conversations'),
+        where('participants', 'array-contains', user.uid)
+      );
+      
+      const snapshot = await getDocs(conversationsQuery);
+      const updatedConversations: Conversation[] = [];
+      
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        const otherParticipantId = data.participants.find((id: string) => id !== user.uid);
+        
+        if (otherParticipantId) {
+          // Récupérer le profil à jour
+          const userProfileDoc = await getDoc(doc(db, 'users', otherParticipantId));
+          if (userProfileDoc.exists()) {
+            const profileData = userProfileDoc.data();
+            const avatarUrl = profileData.profilePicture || profileData.avatar || '🎮';
+            const avatarType = ImageService.detectAvatarType(avatarUrl);
+            
+            const conversation: Conversation = {
+              id: docSnap.id,
+              participants: [{
+                id: otherParticipantId,
+                name: profileData.pseudo || `User_${otherParticipantId.slice(0, 6)}`,
+                avatar: avatarUrl,
+                isImageAvatar: ['cloudinary', 'firebase', 'url', 'local'].includes(avatarType),
+                isOnline: profileData.isOnline || false,
+                currentGame: profileData.currentlyPlaying,
+              }],
+              lastMessage: {
+                id: 'last',
+                senderId: data.lastMessage?.senderId || 'system',
+                content: data.lastMessage?.content || 'Conversation créée',
+                timestamp: data.lastMessage?.timestamp?.toDate() || data.createdAt?.toDate() || new Date(),
+                type: data.lastMessage?.type || 'system',
+              },
+              unreadCount: 0,
+              gameInCommon: data.gameInCommon,
+              createdAt: data.createdAt?.toDate() || new Date(),
+              updatedAt: data.updatedAt?.toDate() || new Date(),
+            };
+            
+            updatedConversations.push(conversation);
+          }
+        }
+      }
+      
+      setConversations(updatedConversations);
+      console.log(`✅ ${updatedConversations.length} avatars synchronisés manuellement`);
+      
+    } catch (error) {
+      console.error('❌ Erreur synchronisation manuelle avatars:', error);
+    }
+  };
+
   // 👂 Écouter les conversations en temps réel
   useEffect(() => {
     if (!user?.uid) {
@@ -234,7 +301,35 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
             
             // Récupérer les détails du participant (pas moi)
             const otherParticipantId = data.participants.find((id: string) => id !== user.uid);
-            const participantDetails = data.participantDetails?.[otherParticipantId];
+            let participantDetails = data.participantDetails?.[otherParticipantId];
+
+            // 🔄 SYNCHRONISATION AVATAR : Récupérer les infos à jour du profil utilisateur
+            if (otherParticipantId) {
+              try {
+                const userProfileDoc = await getDoc(doc(db, 'users', otherParticipantId));
+                if (userProfileDoc.exists()) {
+                  const profileData = userProfileDoc.data();
+                  
+                  // Mettre à jour avec les infos les plus récentes du profil
+                  const avatarUrl = profileData.profilePicture || profileData.avatar || '🎮';
+                  const avatarType = ImageService.detectAvatarType(avatarUrl);
+                  
+                  participantDetails = {
+                    ...participantDetails,
+                    name: profileData.pseudo || participantDetails?.name || `User_${otherParticipantId.slice(0, 6)}`,
+                    avatar: avatarUrl,
+                    isImageAvatar: ['cloudinary', 'firebase', 'url', 'local'].includes(avatarType),
+                    isOnline: profileData.isOnline || false,
+                    currentGame: profileData.currentlyPlaying || participantDetails?.currentGame,
+                  };
+                  
+                  console.log('🔄 Avatar synchronisé pour:', participantDetails.name, '→', avatarUrl);
+                }
+              } catch (profileError) {
+                console.warn('⚠️ Erreur sync profil participant:', profileError);
+                // Continuer avec les données existantes si erreur
+              }
+            }
 
             if (participantDetails) {
               const conversation: Conversation = {
@@ -243,7 +338,7 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
                   id: otherParticipantId,
                   name: participantDetails.name,
                   avatar: participantDetails.avatar,
-                  isImageAvatar: participantDetails.isImageAvatar || ImageService.detectAvatarType(participantDetails.avatar) === 'firebase' || ImageService.detectAvatarType(participantDetails.avatar) === 'url',
+                  isImageAvatar: participantDetails.isImageAvatar,
                   isOnline: participantDetails.isOnline || false,
                   currentGame: participantDetails.currentGame,
                 }],
@@ -266,7 +361,7 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
 
           setConversations(conversationsData);
           setError(null);
-          console.log(`✅ ${conversationsData.length} conversations synchronisées`);
+          console.log(`✅ ${conversationsData.length} conversations synchronisées avec avatars à jour`);
         } catch (err) {
           console.error('❌ Erreur traitement conversations:', err);
           setError('Erreur lors de la synchronisation');
@@ -294,6 +389,7 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
     markAsRead,
     deleteConversation,
     refreshConversations,
+    syncAvatars,
   };
 
   return (

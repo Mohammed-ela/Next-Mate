@@ -1,5 +1,7 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
+import Toast from 'react-native-toast-message';
+import { toastConfig } from '../components/NextMateToast';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ConversationsProvider } from '../context/ConversationsContext';
 import { ThemeProvider } from '../context/ThemeContext';
@@ -61,6 +63,7 @@ export default function RootLayout() {
         <ConversationsProvider>
           <ThemeProvider>
             <RootLayoutNav />
+            <Toast config={toastConfig} />
           </ThemeProvider>
         </ConversationsProvider>
       </UserProfileProvider>

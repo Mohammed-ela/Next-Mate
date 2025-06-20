@@ -18,9 +18,10 @@ import {
   View
 } from "react-native";
 import { useAuth } from '../../context/AuthContext';
+import { useConversations } from '../../context/ConversationsContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useUserProfile } from '../../context/UserProfileContext';
-import ImageService from '../../services/ImageService';
+import ImageService from '../../services/imageService';
 
 const POPULAR_GAMES = [
   { id: '1', name: 'Valorant', icon: '🎯', platform: 'PC' },
@@ -51,6 +52,7 @@ export default function HomeScreen() {
   const { logout, user } = useAuth();
   const { profile, updateProfile, loading } = useUserProfile();
   const { colors, isDarkMode } = useTheme();
+  const { syncAvatars } = useConversations();
   
   // États existants
   const [isGameModalVisible, setIsGameModalVisible] = useState(false);
@@ -149,7 +151,12 @@ export default function HomeScreen() {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (permissionResult.granted === false) {
-        Alert.alert("Permission refusée", "L'accès à la galerie photo est nécessaire pour changer votre avatar.");
+        Alert.alert(
+          "🚫 Permission refusée", 
+          "L'accès à la galerie photo est nécessaire pour changer votre avatar.",
+          [{ text: "OK", style: "default" }],
+          { userInterfaceStyle: 'dark' }
+        );
         return;
       }
 
@@ -165,37 +172,55 @@ export default function HomeScreen() {
         const localUri = pickerResult.assets[0].uri;
         
         // Afficher un indicateur de chargement
-        Alert.alert("Upload en cours", "Upload de votre nouvelle photo...");
+        // La sauvegarde est maintenant gérée par des toasts dans ImageService
         
-        // Uploader vers Firebase Storage
-        const firebaseUrl = await ImageService.replaceImage(
+        // Sauvegarder l'image (mode local pour le développement)
+        const imageUrl = await ImageService.replaceImage(
           localUri,
           profile?.profilePicture,
           user?.uid || '',
           'avatar'
         );
         
-        if (firebaseUrl) {
+        if (imageUrl) {
           // Calculer le nouveau compteur
           const newChangesCount = lastChangeDate === today ? changesCount + 1 : 1;
           
           const success = await updateProfile({ 
-            profilePicture: firebaseUrl, // URL Firebase au lieu du chemin local
+            profilePicture: imageUrl, // URI locale pour le développement
             lastAvatarChangeDate: new Date(),
             avatarChangesToday: newChangesCount
           });
           
           if (success) {
-            console.log(`✅ Avatar mis à jour avec Firebase Storage (${newChangesCount}/2 aujourd'hui)`);
-            Alert.alert("Succès", "Votre avatar a été mis à jour ! 📸");
+            console.log(`✅ Avatar mis à jour en mode local (${newChangesCount}/2 aujourd'hui)`);
+            // Le toast est déjà géré par ImageService, pas besoin d'Alert ici
+            
+            // 🔄 Synchroniser les avatars dans les conversations
+            try {
+              await syncAvatars();
+              console.log('🔄 Conversations synchronisées après changement d\'avatar');
+            } catch (syncError) {
+              console.warn('⚠️ Erreur synchronisation conversations:', syncError);
+            }
           }
         } else {
-          Alert.alert("Erreur", "Impossible d'uploader l'image. Réessayez plus tard.");
+          Alert.alert(
+            "❌ Erreur", 
+            "Impossible de sauvegarder l'image.",
+            [{ text: "OK", style: "default" }],
+            { userInterfaceStyle: 'dark' }
+          );
         }
       }
     } catch (error) {
       console.error('Erreur lors du changement d\'avatar:', error);
-      Alert.alert("Erreur", "Impossible de changer l'avatar.");
+      Alert.alert(
+        "❌ Erreur", 
+        "Impossible de changer l'avatar.",
+        [{ text: "OK", style: "default" }],
+        { userInterfaceStyle: 'dark' }
+      );
     }
   };
 
@@ -393,21 +418,32 @@ export default function HomeScreen() {
               <TouchableOpacity 
                 style={styles.avatarContainer}
                 onPress={handleChangeAvatar}
+                activeOpacity={0.8}
               >
                 <LinearGradient
                   colors={['#FF8E53', '#FF6B35']}
                   style={styles.avatarGradient}
                 >
                   {profile?.profilePicture ? (
-                    <Image 
-                      source={{ uri: profile.profilePicture }} 
-                      style={styles.avatarImage} 
-                    />
+                    // Détecter automatiquement le type d'avatar
+                    ImageService.detectAvatarType(profile.profilePicture) === 'emoji' ? (
+                      <Text style={styles.avatarEmoji}>{profile.profilePicture}</Text>
+                    ) : (
+                      <Image 
+                        source={{ uri: profile.profilePicture }} 
+                        style={styles.avatarImage}
+                        defaultSource={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' }}
+                      />
+                    )
                   ) : (
                     <Ionicons name="person" size={40} color="#FFFFFF" />
                   )}
-                  {profile?.isOnline && <View style={styles.onlineIndicator} />}
+                  {profile?.isOnline && <View style={[styles.onlineIndicator, styles.onlineIndicatorPulse]} />}
                 </LinearGradient>
+                {/* Petit indicateur pour montrer que c'est cliquable */}
+                <View style={styles.editAvatarHint}>
+                  <Ionicons name="camera" size={12} color="#FFFFFF" />
+                </View>
               </TouchableOpacity>
               
               {isEditingProfile ? (
@@ -1721,5 +1757,27 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  avatarEmoji: {
+    fontSize: 40,
+    fontWeight: 'bold',
+  },
+  editAvatarHint: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  onlineIndicatorPulse: {
+    backgroundColor: '#4CAF50',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
   },
 });

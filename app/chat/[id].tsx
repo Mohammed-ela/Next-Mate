@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   FlatList,
   Image,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   StatusBar,
@@ -15,6 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { useConversations } from '../../context/ConversationsContext';
 import { MessagesProvider, useMessages } from '../../context/MessagesContext';
@@ -45,55 +47,105 @@ function ChatContent({ conversationId }: { conversationId: string }) {
   const { messages, loading, sendMessage } = useMessages();
   const { colors, isDarkMode } = useTheme();
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   
   // Récupérer la conversation depuis le contexte
   const conversation = getConversationById(conversationId);
   const participant = conversation?.participants[0];
   
-  const [newMessage, setNewMessage] = React.useState('');
+  const [newMessage, setNewMessage] = useState('');
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const [inputHeight, setInputHeight] = useState(36);
   const flatListRef = useRef<FlatList>(null);
+  const textInputRef = useRef<TextInput>(null);
   
-  const currentUserId = user?.uid || '1'; // ID de l'utilisateur actuel
+  const currentUserId = user?.uid || '1';
 
+  // 🎯 Gestion du clavier pour tous les appareils Android
   useEffect(() => {
-    // Scroll to bottom when messages change
+    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
+      console.log('⌨️ Clavier ouvert, hauteur:', e.endCoordinates.height);
+      setKeyboardVisible(true);
+      
+      // Auto-scroll vers le bas quand le clavier s'ouvre
+      setTimeout(() => {
+        if (flatListRef.current && messages.length > 0) {
+          flatListRef.current.scrollToEnd({ animated: true });
+        }
+      }, 100);
+    });
+
+    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
+      console.log('⌨️ Clavier fermé');
+      setKeyboardVisible(false);
+    });
+
+    return () => {
+      keyboardDidShowListener?.remove();
+      keyboardDidHideListener?.remove();
+    };
+  }, [messages.length]);
+
+  // 🔄 Auto-scroll quand les messages changent
+  useEffect(() => {
     if (flatListRef.current && messages.length > 0) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      }, 150);
     }
   }, [messages]);
+
+  // 📝 Gestion du changement de texte avec auto-scroll
+  const handleTextChange = (text: string) => {
+    setNewMessage(text);
+    
+    // Auto-scroll vers le bas quand on tape (surtout important sur certains Android)
+    if (isKeyboardVisible && flatListRef.current) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 50);
+    }
+  };
+
+  // 📏 Gestion de la hauteur dynamique de l'input
+  const handleContentSizeChange = (event: any) => {
+    const newHeight = Math.min(Math.max(36, event.nativeEvent.contentSize.height), 100);
+    setInputHeight(newHeight);
+  };
 
   const handleSendMessage = async () => {
     if (newMessage.trim()) {
       const success = await sendMessage(newMessage.trim());
       if (success) {
         setNewMessage('');
+        setInputHeight(36); // Reset hauteur input
+        
+        // Scroll immédiatement après envoi
+        setTimeout(() => {
+          if (flatListRef.current) {
+            flatListRef.current.scrollToEnd({ animated: true });
+          }
+        }, 100);
       }
     }
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString('fr-FR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
-
+  // 🎮 Invitation de jeu améliorée
   const inviteToGame = () => {
     Alert.alert(
-      'Invitation de jeu',
+      '🎮 Invitation de jeu',
       `Inviter ${participant?.name} à jouer à ${participant?.currentGame || 'un jeu'} ?`,
       [
         { text: 'Annuler', style: 'cancel' },
         { 
-          text: 'Inviter', 
+          text: '🚀 Inviter', 
           onPress: async () => {
             const gameInviteMessage = `🎮 Invitation de jeu : ${participant?.currentGame || 'Partie'} !`;
             await sendMessage(gameInviteMessage, 'game_invite');
           }
         }
-      ]
+      ],
+      { userInterfaceStyle: isDarkMode ? 'dark' : 'light' }
     );
   };
 
@@ -197,6 +249,13 @@ function ChatContent({ conversationId }: { conversationId: string }) {
     );
   };
 
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('fr-FR', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
@@ -224,15 +283,15 @@ function ChatContent({ conversationId }: { conversationId: string }) {
               ) : (
                 <Text style={styles.headerAvatarText}>{participant.avatar}</Text>
               )}
-              {participant.isOnline && <View style={styles.onlineIndicator} />}
+              {participant.isOnline && <View style={[styles.onlineIndicator, styles.onlineIndicatorPulse]} />}
             </View>
             
             <View style={styles.headerText}>
               <Text style={styles.participantName}>{participant.name}</Text>
               <Text style={styles.statusText}>
                 {participant.isOnline ? 
-                  (participant.currentGame ? `Joue à ${participant.currentGame}` : 'En ligne') : 
-                  'Hors ligne'
+                  (participant.currentGame ? `🎮 ${participant.currentGame}` : '✅ En ligne') : 
+                  '⚫ Hors ligne'
                 }
               </Text>
             </View>
@@ -242,45 +301,91 @@ function ChatContent({ conversationId }: { conversationId: string }) {
             <TouchableOpacity 
               style={styles.gameButton}
               onPress={inviteToGame}
+              activeOpacity={0.7}
             >
               <Ionicons name="game-controller" size={20} color="#FF8E53" />
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Messages */}
+        {/* Messages avec gestion améliorée */}
         <FlatList
           ref={flatListRef}
           data={messages}
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
           style={styles.messagesList}
-          contentContainerStyle={styles.messagesContent}
+          contentContainerStyle={[
+            styles.messagesContent,
+            { paddingBottom: isKeyboardVisible ? 10 : 20 } // Moins de padding quand clavier ouvert
+          ]}
           showsVerticalScrollIndicator={false}
+          maintainVisibleContentPosition={{
+            minIndexForVisible: 0,
+            autoscrollToTopThreshold: 10,
+          }}
+          onContentSizeChange={() => {
+            // Auto-scroll quand le contenu change
+            if (flatListRef.current && messages.length > 0) {
+              setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              }, 100);
+            }
+          }}
         />
 
-        {/* Input */}
+        {/* Input amélioré avec gestion clavier intelligente */}
         <KeyboardAvoidingView 
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.inputContainer}
+          style={[
+            styles.inputContainer, 
+            { 
+              paddingBottom: Math.max(insets.bottom, 10),
+              backgroundColor: isKeyboardVisible ? 'rgba(0, 0, 0, 0.4)' : 'rgba(0, 0, 0, 0.2)'
+            }
+          ]}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
           <View style={styles.inputRow}>
-            <View style={styles.textInputContainer}>
+            <View style={[styles.textInputContainer, { height: inputHeight + 16 }]}>
               <TextInput
-                style={[styles.textInput, { color: colors.text }]}
+                ref={textInputRef}
+                style={[
+                  styles.textInput, 
+                  { 
+                    color: colors.text,
+                    height: inputHeight,
+                  }
+                ]}
                 value={newMessage}
-                onChangeText={setNewMessage}
+                onChangeText={handleTextChange}
+                onContentSizeChange={handleContentSizeChange}
                 placeholder="Écris ton message..."
                 placeholderTextColor={colors.textSecondary}
                 multiline
                 maxLength={500}
+                textAlignVertical="top"
+                blurOnSubmit={false}
+                onFocus={() => {
+                  // Scroll vers le bas quand on focus l'input
+                  setTimeout(() => {
+                    if (flatListRef.current) {
+                      flatListRef.current.scrollToEnd({ animated: true });
+                    }
+                  }, 300);
+                }}
               />
             </View>
             
             <TouchableOpacity 
-              style={[styles.sendButton, newMessage.trim() && styles.sendButtonActive]}
+              style={[
+                styles.sendButton, 
+                newMessage.trim() && styles.sendButtonActive,
+                { marginBottom: (inputHeight - 36) / 2 } // Centrer le bouton verticalement
+              ]}
               onPress={handleSendMessage}
               disabled={!newMessage.trim()}
+              activeOpacity={0.8}
             >
               <LinearGradient
                 colors={newMessage.trim() ? ['#FF8E53', '#FF6B35'] : ['#666', '#555']}
@@ -454,12 +559,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.1)',
     backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    paddingTop: 15, // Padding fixe en haut
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingBottom: 15, // Padding fixe en bas
     gap: 12,
   },
   textInputContainer: {
@@ -468,13 +574,19 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    maxHeight: 100,
+    maxHeight: 116, // 100 + 16 de padding
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   textInput: {
     color: '#FFFFFF',
     fontSize: 16,
     minHeight: 36,
-    textAlignVertical: 'center',
+    maxHeight: 100,
+    textAlignVertical: 'top',
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   sendButton: {
     borderRadius: 20,
@@ -533,5 +645,10 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     fontSize: 24,
+  },
+  onlineIndicatorPulse: {
+    backgroundColor: '#10B981',
+    borderWidth: 2,
+    borderColor: '#2F0C4D',
   },
 }); 

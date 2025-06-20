@@ -79,15 +79,18 @@ export default function ConversationsScreen() {
               source={{ uri: item.participants[0].avatar }} 
               style={styles.avatarImage}
               defaultSource={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' }}
+              onError={() => {
+                console.log('❌ Erreur chargement avatar:', item.participants[0].avatar);
+              }}
             />
           ) : (
             <Text style={styles.avatarText}>{item.participants[0].avatar}</Text>
           )}
         </LinearGradient>
-        {item.participants[0].isOnline && <View style={styles.onlineIndicator} />}
+        {item.participants[0].isOnline && <View style={[styles.onlineIndicator, styles.onlineIndicatorPulse]} />}
         {item.unreadCount > 0 && (
           <View style={[styles.unreadBadge, { backgroundColor: colors.primary }]}>
-            <Text style={styles.unreadText}>{item.unreadCount}</Text>
+            <Text style={styles.unreadText}>{item.unreadCount > 99 ? '99+' : item.unreadCount}</Text>
           </View>
         )}
       </View>
@@ -118,13 +121,14 @@ export default function ConversationsScreen() {
         )}
       </View>
 
-      {/* Bouton de suppression */}
+      {/* Bouton de suppression amélioré */}
       <TouchableOpacity 
-        style={styles.deleteButton}
+        style={[styles.deleteButton, { opacity: 0.8 }]}
         onPress={(e) => {
           e.stopPropagation();
           deleteConversation(item.id);
         }}
+        activeOpacity={0.6}
       >
         <Ionicons name="trash-outline" size={20} color="#EF4444" />
       </TouchableOpacity>
@@ -188,7 +192,11 @@ export default function ConversationsScreen() {
               }
             </Text>
             {!searchQuery && (
-              <TouchableOpacity style={styles.findMatesButton}>
+              <TouchableOpacity 
+                style={styles.findMatesButton}
+                onPress={() => router.push('/trouve1mate')}
+                activeOpacity={0.8}
+              >
                 <LinearGradient
                   colors={['#FF8E53', '#FF6B35']}
                   style={styles.findMatesGradient}
@@ -344,6 +352,11 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
+    backgroundColor: '#10B981',
+    borderWidth: 2,
+    borderColor: '#2F0C4D',
+  },
+  onlineIndicatorPulse: {
     backgroundColor: '#10B981',
     borderWidth: 2,
     borderColor: '#2F0C4D',

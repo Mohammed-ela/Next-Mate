@@ -1,72 +1,107 @@
-import storage from '@react-native-firebase/storage';
-import { Alert } from 'react-native';
+import Toast from 'react-native-toast-message';
+import CloudinaryService from './cloudinaryService';
 
-// 📸 Service pour gérer les images avec Firebase Storage
+// 📸 Service pour gérer les images avec Cloudinary
 export class ImageService {
   
-  // 🔄 Uploader une image vers Firebase Storage
+  // 🔄 Uploader une image vers Cloudinary
   static async uploadImage(
     localUri: string, 
     userId: string, 
     imageType: 'avatar' | 'profile' = 'avatar'
   ): Promise<string | null> {
     try {
-      console.log('📸 Début upload image:', localUri);
+      console.log('📸 Upload image vers Cloudinary:', localUri);
       
-      // Générer un nom de fichier unique
-      const timestamp = Date.now();
-      const fileName = `${imageType}_${userId}_${timestamp}.jpg`;
-      const storagePath = `users/${userId}/${fileName}`;
+      // Vérifier si Cloudinary est configuré
+      if (!CloudinaryService.isConfigured()) {
+        console.log('ℹ️ Cloudinary non configuré, mode local');
+        return localUri;
+      }
       
-      // Créer la référence Firebase Storage
-      const reference = storage().ref(storagePath);
+      // Toast de chargement
+      Toast.show({
+        type: 'upload',
+        text1: '📸 Sauvegarde en cours...',
+        text2: 'Votre avatar est en cours de mise à jour',
+        visibilityTime: 0, // Reste affiché jusqu'à ce qu'on le cache
+      });
+
+      // Upload vers Cloudinary
+      const result = await CloudinaryService.uploadImage(localUri, userId, {
+        width: 300,
+        height: 300,
+        quality: 'auto',
+        format: 'auto'
+      });
+
+      // Cacher le toast de chargement
+      Toast.hide();
       
-      // Uploader le fichier
-      console.log('⬆️ Upload vers:', storagePath);
-      const uploadTask = reference.putFile(localUri);
-      
-      // Attendre la fin de l'upload
-      await uploadTask;
-      
-      // Récupérer l'URL de téléchargement
-      const downloadURL = await reference.getDownloadURL();
-      
-      console.log('✅ Image uploadée avec succès:', downloadURL);
-      return downloadURL;
+      if (result.success && result.url) {
+        console.log('✅ Image uploadée vers Cloudinary:', result.url);
+        
+        // Toast de succès
+        Toast.show({
+          type: 'success',
+          text1: '✅ Avatar mis à jour !',
+          text2: 'Votre nouvelle photo de profil a été sauvegardée',
+          visibilityTime: 3000,
+        });
+        
+        return result.url;
+      } else {
+        console.error('❌ Échec upload Cloudinary:', result.error);
+        
+        // Toast d'info - fallback local
+        Toast.show({
+          type: 'info',
+          text1: '📱 Avatar sauvegardé localement',
+          text2: 'Votre photo sera synchronisée prochainement',
+          visibilityTime: 4000,
+        });
+        
+        // Fallback vers l'URI locale
+        return localUri;
+      }
       
     } catch (error) {
       console.error('❌ Erreur upload image:', error);
-      Alert.alert(
-        'Erreur d\'upload', 
-        'Impossible d\'uploader l\'image. Vérifiez votre connexion internet.'
-      );
+      
+      // Toast d'erreur
+      Toast.show({
+        type: 'error',
+        text1: '❌ Erreur de sauvegarde',
+        text2: 'Impossible de sauvegarder l\'image. Réessayez.',
+        visibilityTime: 4000,
+      });
+      
       return null;
     }
   }
   
-  // 🗑️ Supprimer une ancienne image
+  // 🗑️ Supprimer une image de Cloudinary
   static async deleteImage(imageUrl: string): Promise<boolean> {
     try {
-      if (!imageUrl || !imageUrl.includes('firebase')) {
-        return true; // Pas une image Firebase, rien à supprimer
+      // Vérifier si c'est une image Cloudinary
+      if (this.isCloudinaryImage(imageUrl)) {
+        // Extraire le public_id de l'URL Cloudinary
+        const publicId = this.extractPublicIdFromUrl(imageUrl);
+        if (publicId) {
+          return await CloudinaryService.deleteImage(publicId);
+        }
       }
       
-      console.log('🗑️ Suppression ancienne image:', imageUrl);
-      
-      // Extraire le chemin depuis l'URL Firebase
-      const reference = storage().refFromURL(imageUrl);
-      await reference.delete();
-      
-      console.log('✅ Ancienne image supprimée');
+      console.log('ℹ️ Image locale ou non-Cloudinary, pas de suppression nécessaire');
       return true;
       
     } catch (error) {
       console.error('⚠️ Erreur suppression image (non critique):', error);
-      return false; // Non critique, on continue
+      return false;
     }
   }
   
-  // 🔄 Remplacer une image (supprimer l'ancienne + uploader la nouvelle)
+  // 🔄 Remplacer une image
   static async replaceImage(
     newLocalUri: string,
     oldImageUrl: string | undefined,
@@ -74,21 +109,8 @@ export class ImageService {
     imageType: 'avatar' | 'profile' = 'avatar'
   ): Promise<string | null> {
     try {
-      // 1. Uploader la nouvelle image
-      const newImageUrl = await this.uploadImage(newLocalUri, userId, imageType);
-      
-      if (!newImageUrl) {
-        return null; // Échec upload
-      }
-      
-      // 2. Supprimer l'ancienne image (en arrière-plan, non bloquant)
-      if (oldImageUrl) {
-        this.deleteImage(oldImageUrl).catch(err => 
-          console.log('⚠️ Suppression ancienne image échouée (non critique):', err)
-        );
-      }
-      
-      return newImageUrl;
+      // En mode local, on retourne juste la nouvelle URI
+      return await this.uploadImage(newLocalUri, userId, imageType);
       
     } catch (error) {
       console.error('❌ Erreur remplacement image:', error);
@@ -106,12 +128,46 @@ export class ImageService {
     return url.startsWith('file://') || url.startsWith('content://');
   }
   
+  // 🔍 Vérifier si une URL est une image Cloudinary
+  static isCloudinaryImage(url: string): boolean {
+    return url.includes('cloudinary.com') || url.includes('res.cloudinary.com');
+  }
+  
+  // 🔍 Extraire le public_id d'une URL Cloudinary
+  static extractPublicIdFromUrl(url: string): string | null {
+    try {
+      // Format typique: https://res.cloudinary.com/nextmate/image/upload/v1234567890/nextmate/avatars/avatar_userId_timestamp.jpg
+      const match = url.match(/\/([^\/]+)\/([^\/]+)\/([^\/\?]+)/);
+      if (match && match[3]) {
+        // Retirer l'extension
+        return match[3].replace(/\.[^/.]+$/, '');
+      }
+      return null;
+    } catch (error) {
+      console.error('Erreur extraction public_id:', error);
+      return null;
+    }
+  }
+
   // 🔍 Détecter le type d'avatar
-  static detectAvatarType(avatar: string): 'firebase' | 'local' | 'emoji' | 'url' {
+  static detectAvatarType(avatar: string): 'cloudinary' | 'firebase' | 'local' | 'emoji' | 'url' {
+    if (this.isCloudinaryImage(avatar)) return 'cloudinary';
     if (this.isFirebaseImage(avatar)) return 'firebase';
     if (this.isLocalImage(avatar)) return 'local';
     if (avatar.startsWith('http')) return 'url';
     return 'emoji';
+  }
+  
+  // 📋 Informations sur le mode actuel
+  static getStorageMode(): 'cloudinary' | 'local' {
+    return CloudinaryService.isConfigured() ? 'cloudinary' : 'local';
+  }
+  
+  // 💡 Message informatif pour l'utilisateur
+  static getStorageInfo(): string {
+    return CloudinaryService.isConfigured() 
+      ? "Images stockées sur Cloudinary avec optimisation automatique ✨"
+      : "Mode développement : images stockées localement.";
   }
 }
 

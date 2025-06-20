@@ -1,6 +1,7 @@
 import { getApps, initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { enableNetwork, getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 // 🔧 Configuration Firebase de votre projet NextMate
 const firebaseConfig = {
@@ -27,11 +28,15 @@ export const auth = getAuth(app);
 // 🗄️ Firestore avec persistance offline
 export const db = getFirestore(app);
 
+// 📸 Storage pour les images
+export const storage = getStorage(app);
+
 // 🛠️ Développement : connection aux émulateurs (optionnel)
 if (__DEV__) {
   // Décommente si tu utilises l'émulateur Firebase
   // connectAuthEmulator(auth, 'http://localhost:9099');
   // connectFirestoreEmulator(db, 'localhost', 8080);
+  // connectStorageEmulator(storage, 'localhost', 9199);
 }
 
 // ✅ Active la persistance Firestore (par défaut sur mobile)

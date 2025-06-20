@@ -161,12 +161,15 @@ export default function Trouve1MateScreen() {
                   source={{ uri: item.avatar }} 
                   style={styles.avatarImage}
                   defaultSource={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' }}
+                  onError={() => {
+                    console.log('❌ Erreur chargement avatar trouve1mate:', item.avatar);
+                  }}
                 />
               ) : (
                 <Text style={styles.avatarEmoji}>{item.avatar}</Text>
               )}
             </View>
-            {item.isOnline && <View style={styles.onlineIndicator} />}
+            {item.isOnline && <View style={[styles.onlineIndicator, styles.onlineIndicatorPulse]} />}
           </View>
           
           <View style={styles.mateInfo}>
@@ -244,6 +247,7 @@ export default function Trouve1MateScreen() {
           <TouchableOpacity 
             style={[styles.profileButton, { backgroundColor: colors.surface }]}
             onPress={() => openProfile(item)}
+            activeOpacity={0.7}
           >
             <Ionicons name="person" size={20} color={colors.textSecondary} />
             <Text style={[styles.profileText, { color: colors.textSecondary }]}>Profil</Text>
@@ -252,6 +256,7 @@ export default function Trouve1MateScreen() {
           <TouchableOpacity 
             style={styles.connectButton}
             onPress={() => connectToUser(item)}
+            activeOpacity={0.8}
           >
             <LinearGradient
               colors={['#FF8E53', '#FF6B35']}
@@ -476,6 +481,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#10B981',
     borderWidth: 2,
     borderColor: '#2F0C4D',
+  },
+  onlineIndicatorPulse: {
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    borderWidth: 2,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
   },
   mateInfo: {
     flex: 1,

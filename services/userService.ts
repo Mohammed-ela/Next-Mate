@@ -56,19 +56,10 @@ export const getDiscoveryUsers = async (
       if (data.profilePicture) {
         const avatarType = ImageService.detectAvatarType(data.profilePicture);
         
-        if (avatarType === 'firebase' || avatarType === 'url') {
-          // Image Firebase ou URL publique
+        if (['cloudinary', 'firebase', 'url', 'local'].includes(avatarType)) {
+          // Image Cloudinary, Firebase, URL publique ou locale
           userAvatar = data.profilePicture;
           isImageAvatar = true;
-        } else if (avatarType === 'local') {
-          // Image locale (file:///) - utiliser l'icône du jeu comme fallback
-          if (Array.isArray(data.games) && data.games.length > 0) {
-            const firstGame = data.games[0];
-            if (typeof firstGame === 'object' && firstGame.icon) {
-              userAvatar = firstGame.icon;
-            }
-          }
-          isImageAvatar = false;
         } else {
           // Emoji ou autre
           userAvatar = data.profilePicture;
@@ -77,7 +68,7 @@ export const getDiscoveryUsers = async (
       } else if (data.avatar) {
         const avatarType = ImageService.detectAvatarType(data.avatar);
         userAvatar = data.avatar;
-        isImageAvatar = avatarType === 'firebase' || avatarType === 'url';
+        isImageAvatar = ['cloudinary', 'firebase', 'url', 'local'].includes(avatarType);
       } else if (Array.isArray(data.games) && data.games.length > 0) {
         // Utiliser l'icône du premier jeu comme fallback
         const firstGame = data.games[0];
