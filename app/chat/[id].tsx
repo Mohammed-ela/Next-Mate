@@ -152,7 +152,7 @@ function ChatContent({ conversationId }: { conversationId: string }) {
         {!isMyMessage && (
           <View style={styles.avatarContainer}>
             {showAvatar ? (
-              (participant?.isImageAvatar || participant?.avatar.startsWith('file:///') || participant?.avatar.startsWith('http')) ? (
+              participant?.isImageAvatar ? (
                 <Image 
                   source={{ uri: participant.avatar }} 
                   style={styles.avatarImage}
@@ -215,7 +215,7 @@ function ChatContent({ conversationId }: { conversationId: string }) {
           
           <View style={styles.headerInfo}>
             <View style={styles.headerAvatar}>
-              {(participant.isImageAvatar || participant.avatar.startsWith('file:///') || participant.avatar.startsWith('http')) ? (
+              {participant.isImageAvatar ? (
                 <Image 
                   source={{ uri: participant.avatar }} 
                   style={styles.headerAvatarImage}

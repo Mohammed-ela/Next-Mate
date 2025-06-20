@@ -1,5 +1,6 @@
 import { collection, getDocs, limit, query } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import ImageService from './imageService';
 
 // 🎮 Interface pour les utilisateurs de la plateforme
 export interface PlatformUser {
@@ -45,28 +46,40 @@ export const getDiscoveryUsers = async (
       // Exclure l'utilisateur actuel
       if (doc.id === currentUserId) return;
       
-      // Calculer la distance aléatoire (en attendant la géolocalisation)
-      const distance = Math.floor(Math.random() * 50) + 1;
-      
       // Calculer le pourcentage de match basé sur les jeux en commun avec l'utilisateur actuel
       const matchPercentage = calculateMatchPercentage(data.games || [], currentUserGames);
       
-      // Gérer l'avatar - utiliser la photo de profil si disponible
+      // Gérer l'avatar intelligemment avec ImageService
       let userAvatar = '🎮'; // Avatar par défaut
       let isImageAvatar = false;
       
-      // Prioriser la photo de profil (même si c'est file:///)
       if (data.profilePicture) {
-        userAvatar = data.profilePicture;
-        isImageAvatar = true;
-      }
-      // Sinon, utiliser l'avatar classique
-      else if (data.avatar) {
+        const avatarType = ImageService.detectAvatarType(data.profilePicture);
+        
+        if (avatarType === 'firebase' || avatarType === 'url') {
+          // Image Firebase ou URL publique
+          userAvatar = data.profilePicture;
+          isImageAvatar = true;
+        } else if (avatarType === 'local') {
+          // Image locale (file:///) - utiliser l'icône du jeu comme fallback
+          if (Array.isArray(data.games) && data.games.length > 0) {
+            const firstGame = data.games[0];
+            if (typeof firstGame === 'object' && firstGame.icon) {
+              userAvatar = firstGame.icon;
+            }
+          }
+          isImageAvatar = false;
+        } else {
+          // Emoji ou autre
+          userAvatar = data.profilePicture;
+          isImageAvatar = false;
+        }
+      } else if (data.avatar) {
+        const avatarType = ImageService.detectAvatarType(data.avatar);
         userAvatar = data.avatar;
-        isImageAvatar = !data.avatar.match(/^[\u{1F000}-\u{1F9FF}]$/u); // Détecter si c'est un emoji
-      }
-      // Sinon, essayer d'utiliser l'icône du premier jeu
-      else if (Array.isArray(data.games) && data.games.length > 0) {
+        isImageAvatar = avatarType === 'firebase' || avatarType === 'url';
+      } else if (Array.isArray(data.games) && data.games.length > 0) {
+        // Utiliser l'icône du premier jeu comme fallback
         const firstGame = data.games[0];
         if (typeof firstGame === 'object' && firstGame.icon) {
           userAvatar = firstGame.icon;

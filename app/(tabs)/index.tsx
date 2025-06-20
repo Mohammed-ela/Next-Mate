@@ -20,6 +20,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useUserProfile } from '../../context/UserProfileContext';
+import ImageService from '../../services/ImageService';
 
 const POPULAR_GAMES = [
   { id: '1', name: 'Valorant', icon: '🎯', platform: 'PC' },
@@ -47,7 +48,7 @@ const RANKS = {
 const GAME_STYLES = ['Chill', 'Tryhard', 'Competitive', 'Fun', 'Improve'];
 
 export default function HomeScreen() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const { profile, updateProfile, loading } = useUserProfile();
   const { colors, isDarkMode } = useTheme();
   
@@ -161,17 +162,35 @@ export default function HomeScreen() {
       });
 
       if (!pickerResult.canceled && pickerResult.assets[0]) {
-        // Calculer le nouveau compteur
-        const newChangesCount = lastChangeDate === today ? changesCount + 1 : 1;
+        const localUri = pickerResult.assets[0].uri;
         
-        const success = await updateProfile({ 
-          profilePicture: pickerResult.assets[0].uri,
-          lastAvatarChangeDate: new Date(),
-          avatarChangesToday: newChangesCount
-        });
+        // Afficher un indicateur de chargement
+        Alert.alert("Upload en cours", "Upload de votre nouvelle photo...");
         
-        if (success) {
-          console.log(`✅ Avatar mis à jour (${newChangesCount}/2 aujourd'hui)`);
+        // Uploader vers Firebase Storage
+        const firebaseUrl = await ImageService.replaceImage(
+          localUri,
+          profile?.profilePicture,
+          user?.uid || '',
+          'avatar'
+        );
+        
+        if (firebaseUrl) {
+          // Calculer le nouveau compteur
+          const newChangesCount = lastChangeDate === today ? changesCount + 1 : 1;
+          
+          const success = await updateProfile({ 
+            profilePicture: firebaseUrl, // URL Firebase au lieu du chemin local
+            lastAvatarChangeDate: new Date(),
+            avatarChangesToday: newChangesCount
+          });
+          
+          if (success) {
+            console.log(`✅ Avatar mis à jour avec Firebase Storage (${newChangesCount}/2 aujourd'hui)`);
+            Alert.alert("Succès", "Votre avatar a été mis à jour ! 📸");
+          }
+        } else {
+          Alert.alert("Erreur", "Impossible d'uploader l'image. Réessayez plus tard.");
         }
       }
     } catch (error) {

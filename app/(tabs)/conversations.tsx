@@ -74,7 +74,7 @@ export default function ConversationsScreen() {
           colors={['#FF8E53', '#FF6B35']}
           style={styles.avatar}
         >
-          {(item.participants[0].isImageAvatar || item.participants[0].avatar.startsWith('file:///') || item.participants[0].avatar.startsWith('http')) ? (
+          {item.participants[0].isImageAvatar ? (
             <Image 
               source={{ uri: item.participants[0].avatar }} 
               style={styles.avatarImage}

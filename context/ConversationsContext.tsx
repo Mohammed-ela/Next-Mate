@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { db } from '../config/firebase';
+import ImageService from '../services/imageService';
 import { useAuth } from './AuthContext';
 
 // 🔒 Types TypeScript pour les conversations
@@ -242,7 +243,7 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
                   id: otherParticipantId,
                   name: participantDetails.name,
                   avatar: participantDetails.avatar,
-                  isImageAvatar: participantDetails.isImageAvatar || false,
+                  isImageAvatar: participantDetails.isImageAvatar || ImageService.detectAvatarType(participantDetails.avatar) === 'firebase' || ImageService.detectAvatarType(participantDetails.avatar) === 'url',
                   isOnline: participantDetails.isOnline || false,
                   currentGame: participantDetails.currentGame,
                 }],
