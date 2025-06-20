@@ -11,7 +11,7 @@ scripts/useradd/addTestUsers.ts ← Script test data
 
 ### 🗄️ **Structure Firebase (Collections) :**
 ```
-📦 nextmate-96970 (projet Firebase)
+📦 nextmate (Firebase bdd)
 ├── 👤 users/
 │   ├── {userId}
 │   │   ├── uid: string
