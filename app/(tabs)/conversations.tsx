@@ -1,273 +1,497 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    FlatList,
-    Image,
-    Modal,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  Modal,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import InteractiveBadge from '../../components/InteractiveBadge';
+import { NotificationBadge } from '../../components/NotificationBadge';
+import { useAuth } from '../../context/AuthContext';
 import { useConversations, type Conversation } from '../../context/ConversationsContext';
+import { useBadgeNotifications } from '../../context/NotificationContext';
 import { useTheme } from '../../context/ThemeContext';
+
+// Configuration ultra-optimisée
+const PERFORMANCE_CONFIG = {
+  ANIMATION_DURATION: 120, // Plus rapide
+  STAGGERED_DELAY: 15, // Délai réduit entre animations
+  SEARCH_DEBOUNCE: 150, // Debounce recherche optimisé
+  REFRESH_THRESHOLD: 40, // Pull-to-refresh threshold réduit
+  ITEM_HEIGHT: 88, // Hauteur optimisée pour le contenu
+  RENDER_BATCH_SIZE: 8, // Rendu par batch optimisé
+  WINDOW_SIZE: 8, // Fenêtre de rendu réduite
+};
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
 
 export default function ConversationsScreen() {
   const { colors, isDarkMode } = useTheme();
-  const { conversations, markAsRead, deleteConversation: removeConversation } = useConversations();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
+  const { user } = useAuth();
+  const { conversations, loading, deleteConversation, syncAllParticipantData } = useConversations();
+  const { animateBadgeDisappear, updateBadge, clearBadge } = useBadgeNotifications();
+  const insets = useSafeAreaInsets();
 
-  const formatTimeAgo = (date: Date) => {
+  // États optimisés
+  const [searchQuery, setSearchQuery] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
+  const [searchFocused, setSearchFocused] = useState(false);
+
+  // Animations optimisées
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  const searchAnim = useRef(new Animated.Value(0)).current;
+  const badgeAnimations = useRef<Map<string, Animated.Value>>(new Map()).current;
+
+  // 🎨 Animation d'entrée optimisée
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: PERFORMANCE_CONFIG.ANIMATION_DURATION * 2,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: PERFORMANCE_CONFIG.ANIMATION_DURATION * 2,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
+
+  // 🔍 Animation recherche optimisée
+  useEffect(() => {
+    Animated.timing(searchAnim, {
+      toValue: searchFocused ? 1 : 0,
+      duration: PERFORMANCE_CONFIG.ANIMATION_DURATION,
+      useNativeDriver: false,
+    }).start();
+  }, [searchFocused]);
+
+  // 🔄 Synchronisation des badges avec les conversations
+  useEffect(() => {
+    conversations.forEach(conversation => {
+      const unreadCount = conversation.unreadCount || 0;
+      if (unreadCount > 0) {
+        updateBadge(conversation.id, unreadCount);
+      } else {
+        clearBadge(conversation.id);
+      }
+    });
+  }, [conversations, updateBadge, clearBadge]);
+
+  // 📱 Filtrage optimisé avec useMemo
+  const filteredConversations = useMemo(() => {
+    if (!searchQuery.trim()) return conversations;
+    
+    const query = searchQuery.toLowerCase().trim();
+    return conversations.filter(conversation => {
+      const participant = conversation.participants[0];
+      return participant?.name?.toLowerCase().includes(query) ||
+             conversation.lastMessage?.content?.toLowerCase().includes(query);
+    });
+  }, [conversations, searchQuery]);
+
+  // 🔄 Pull-to-refresh optimisé
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      // Simuler refresh - les données sont déjà synchronisées via Firebase
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    } catch (error) {
+      console.error('Erreur refresh conversations:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  }, []);
+
+  // 🗑️ Suppression optimisée avec animation
+  const handleDeleteConversation = useCallback(async (conversationId: string) => {
+    try {
+      // Animation de disparition du badge
+      const badgeAnim = badgeAnimations.get(conversationId);
+      if (badgeAnim) {
+        Animated.timing(badgeAnim, {
+          toValue: 0,
+          duration: PERFORMANCE_CONFIG.ANIMATION_DURATION,
+          useNativeDriver: true,
+        }).start();
+      }
+
+      await deleteConversation(conversationId);
+      animateBadgeDisappear(conversationId);
+      
+      // Nettoyage de l'animation
+      badgeAnimations.delete(conversationId);
+      
+    } catch (error) {
+      console.error('Erreur suppression conversation:', error);
+      Alert.alert('❌ Erreur', 'Impossible de supprimer la conversation');
+    }
+  }, [deleteConversation, animateBadgeDisappear, badgeAnimations]);
+
+  // 📤 Navigation optimisée vers le chat
+  const handleConversationPress = useCallback((conversationId: string) => {
+    // Animation de disparition du badge
+    const badgeAnim = badgeAnimations.get(conversationId);
+    if (badgeAnim) {
+      Animated.timing(badgeAnim, {
+        toValue: 0,
+        duration: PERFORMANCE_CONFIG.ANIMATION_DURATION,
+        useNativeDriver: true,
+      }).start();
+    }
+
+    animateBadgeDisappear(conversationId);
+    router.push(`/chat/${conversationId}`);
+  }, [animateBadgeDisappear, badgeAnimations]);
+
+  // 🕐 Formatage optimisé du temps
+  const formatLastMessageTime = useCallback((timestamp: Date) => {
     const now = new Date();
-    const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+    const diffInMinutes = Math.floor((now.getTime() - timestamp.getTime()) / (1000 * 60));
     
     if (diffInMinutes < 1) return 'À l\'instant';
     if (diffInMinutes < 60) return `${diffInMinutes}min`;
-    if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h`;
-    return `${Math.floor(diffInMinutes / 1440)}j`;
-  };
+    if (diffInMinutes < 1440) return timestamp.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    if (diffInMinutes < 10080) return timestamp.toLocaleDateString('fr-FR', { weekday: 'short' });
+    return timestamp.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
+  }, []);
 
-  const openConversation = (conversationId: string) => {
-    // Marquer comme lu
-    markAsRead(conversationId);
+  // 🎯 Rendu d'item optimisé avec animations
+  const renderConversationItem = useCallback(({ item, index }: { item: Conversation; index: number }) => {
+    const participant = item.participants[0];
+    const hasUnreadMessages = (item.unreadCount || 0) > 0;
     
-    // Ouvrir le chat individuel
-    router.push(`/chat/${conversationId}`);
-  };
-
-  const filteredConversations = conversations.filter(conv =>
-    conv.participants[0].name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const deleteConversation = (conversationId: string) => {
-    setConversationToDelete(conversationId);
-    setShowDeleteModal(true);
-  };
-
-  const confirmDeleteConversation = () => {
-    if (conversationToDelete) {
-      removeConversation(conversationToDelete);
-      setShowDeleteModal(false);
-      setConversationToDelete(null);
+    // Compteur de messages non lus pour cette conversation spécifique
+    const conversationUnreadCount = item.unreadCount || 0;
+    
+    // Initialiser l'animation du badge si nécessaire
+    if (conversationUnreadCount > 0 && !badgeAnimations.has(item.id)) {
+      badgeAnimations.set(item.id, new Animated.Value(1));
     }
-  };
 
-  const cancelDeleteConversation = () => {
-    setShowDeleteModal(false);
-    setConversationToDelete(null);
-  };
+    const badgeOpacity = badgeAnimations.get(item.id) || new Animated.Value(conversationUnreadCount > 0 ? 1 : 0);
 
-  const renderConversationItem = ({ item }: { item: Conversation }) => (
-    <TouchableOpacity
-      style={[styles.conversationItem, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}
-      onPress={() => openConversation(item.id)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.avatarContainer}>
-        <LinearGradient
-          colors={['#FF8E53', '#FF6B35']}
-          style={styles.avatar}
-        >
-          {item.participants[0].isImageAvatar ? (
-            <Image 
-              source={{ uri: item.participants[0].avatar }} 
-              style={styles.avatarImage}
-              defaultSource={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' }}
-              onError={() => {
-                console.log('❌ Erreur chargement avatar:', item.participants[0].avatar);
-              }}
-            />
-          ) : (
-            <Text style={styles.avatarText}>{item.participants[0].avatar}</Text>
-          )}
-        </LinearGradient>
-        {item.participants[0].isOnline && <View style={[styles.onlineIndicator, styles.onlineIndicatorPulse]} />}
-        {item.unreadCount > 0 && (
-          <View style={[styles.unreadBadge, { backgroundColor: colors.primary }]}>
-            <Text style={styles.unreadText}>{item.unreadCount > 99 ? '99+' : item.unreadCount}</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.conversationContent}>
-        <View style={styles.conversationHeader}>
-          <Text style={[styles.participantName, { color: colors.text }]}>{item.participants[0].name}</Text>
-          <Text style={[styles.timestamp, { color: colors.textSecondary }]}>{formatTimeAgo(item.lastMessage.timestamp)}</Text>
-        </View>
-        
-        <View style={styles.messagePreview}>
-          <Text style={[styles.lastMessage, { color: colors.textSecondary }]} numberOfLines={1}>
-            {item.lastMessage.content}
-          </Text>
-          {item.participants[0].currentGame && (
-            <View style={styles.gameStatus}>
-              <Ionicons name="game-controller" size={12} color="#FF8E53" />
-              <Text style={[styles.currentGame, { color: colors.textSecondary }]}>{item.participants[0].currentGame}</Text>
-            </View>
-          )}
-        </View>
-
-        {item.gameInCommon && (
-          <View style={styles.gameInCommon}>
-            <Ionicons name="people" size={12} color="#8B5CF6" />
-            <Text style={[styles.gameInCommonText, { color: colors.textSecondary }]}>{item.gameInCommon}</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Bouton de suppression amélioré */}
-      <TouchableOpacity 
-        style={[styles.deleteButton, { opacity: 0.8 }]}
-        onPress={(e) => {
-          e.stopPropagation();
-          deleteConversation(item.id);
-        }}
-        activeOpacity={0.6}
+    return (
+      <Animated.View
+        style={[
+          styles.conversationItem,
+          {
+            backgroundColor: colors.surface,
+            opacity: fadeAnim,
+            transform: [
+              {
+                translateY: slideAnim.interpolate({
+                  inputRange: [0, 50],
+                  outputRange: [0, 50],
+                })
+              }
+            ]
+          }
+        ]}
       >
-        <Ionicons name="trash-outline" size={20} color="#EF4444" />
-      </TouchableOpacity>
-    </TouchableOpacity>
-  );
+        <TouchableOpacity
+          style={styles.conversationContent}
+          onPress={() => handleConversationPress(item.id)}
+          activeOpacity={0.8}
+        >
+          {/* Avatar optimisé */}
+          <View style={styles.avatarContainer}>
+            {participant.avatar.startsWith('http') ? (
+              <Image 
+                source={{ uri: participant.avatar }} 
+                style={styles.avatar}
+                resizeMode="cover"
+              />
+            ) : (
+              <Text style={styles.avatarEmoji}>{participant.avatar}</Text>
+            )}
+            
+            {/* Badge animé optimisé */}
+            {conversationUnreadCount > 0 && (
+              <Animated.View
+                style={[
+                  styles.unreadBadgeContainer,
+                  {
+                    opacity: badgeOpacity,
+                    transform: [
+                      {
+                        scale: badgeOpacity.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0.3, 1],
+                        })
+                      }
+                    ]
+                  }
+                ]}
+              >
+                <NotificationBadge
+                  count={conversationUnreadCount}
+                  isVisible={conversationUnreadCount > 0}
+                  isAnimating={false}
+                  type="message"
+                  size="medium"
+                  position="topRight"
+                />
+              </Animated.View>
+            )}
+          </View>
+
+          {/* Contenu conversation optimisé */}
+          <View style={styles.conversationInfo}>
+            <View style={styles.conversationHeader}>
+              <Text 
+                style={[
+                  styles.participantName, 
+                  { color: colors.text },
+                  hasUnreadMessages && styles.unreadText
+                ]}
+                numberOfLines={1}
+              >
+                {participant.name}
+              </Text>
+              
+              {item.lastMessage && (
+                <Text style={[styles.messageTime, { color: colors.textSecondary }]}>
+                  {formatLastMessageTime(item.lastMessage.timestamp)}
+                </Text>
+              )}
+            </View>
+
+            {item.lastMessage && (
+              <Text 
+                style={[
+                  styles.lastMessage, 
+                  { color: colors.textSecondary },
+                  hasUnreadMessages && styles.unreadLastMessage
+                ]}
+                numberOfLines={2}
+              >
+                {item.lastMessage.senderId === user?.uid ? 'Vous: ' : ''}
+                {item.lastMessage.content}
+              </Text>
+            )}
+          </View>
+        </TouchableOpacity>
+
+        {/* Bouton suppression optimisé */}
+        <TouchableOpacity
+          style={[styles.deleteButton, { backgroundColor: '#FF4444' }]}
+          onPress={() => {
+            setConversationToDelete(item.id);
+            setDeleteModalVisible(true);
+          }}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="trash" size={18} color="#FFFFFF" />
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  }, [
+    colors, 
+    fadeAnim, 
+    slideAnim, 
+    user?.uid, 
+    handleConversationPress, 
+    formatLastMessageTime,
+    badgeAnimations,
+    conversations
+  ]);
+
+  // 🎨 Animations recherche
+  const searchContainerStyle = {
+    transform: [
+      {
+        scaleY: searchAnim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.95, 1],
+        })
+      }
+    ],
+    opacity: searchAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0.8, 1],
+    })
+  };
+
+  // 🚀 Early return pour état vide optimisé
+  if (loading && conversations.length === 0) {
+    return (
+      <View style={[styles.container, styles.centerContent, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, { color: colors.textSecondary }]}>
+          Chargement des conversations...
+        </Text>
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Header optimisé avec gradient */}
       <LinearGradient
         colors={colors.gradient as [string, string]}
-        style={styles.gradient}
+        style={[styles.header, { paddingTop: insets.top + 15 }]}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Messages 💬</Text>
-          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-            {conversations.length} conversation{conversations.length > 1 ? 's' : ''}
-          </Text>
-        </View>
-
-        {/* Barre de recherche */}
-        <View style={styles.searchContainer}>
-          <View style={[styles.searchBar, { backgroundColor: colors.surface }]}>
-            <Ionicons name="search" size={20} color={colors.textSecondary} />
-            <TextInput
-              style={[styles.searchInput, { color: colors.text }]}
-              placeholder="Rechercher un mate..."
-              placeholderTextColor={colors.textSecondary}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
+        <Text style={[styles.headerTitle, { color: colors.text }]}>
+          Conversations
+        </Text>
+        
+        {/* Badge global optimisé */}
+        {conversations.length > 0 && (
+          <View style={styles.globalBadgeContainer}>
+            <InteractiveBadge
+              count={conversations.length}
+              position="top-right"
+              size="large"
             />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close" size={20} color={colors.textSecondary} />
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-
-        {/* Liste des conversations */}
-        {filteredConversations.length > 0 ? (
-          <FlatList
-            data={filteredConversations}
-            keyExtractor={(item) => item.id}
-            renderItem={renderConversationItem}
-            style={styles.conversationsList}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.conversationsContent}
-          />
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateIcon}>💬</Text>
-            <Text style={[styles.emptyStateTitle, { color: colors.text }]}>
-              {searchQuery ? 'Aucun résultat' : 'Aucune conversation'}
-            </Text>
-            <Text style={[styles.emptyStateSubtitle, { color: colors.textSecondary }]}>
-              {searchQuery 
-                ? 'Essayez un autre nom de mate'
-                : 'Commencez à chercher des mates pour démarrer une conversation !'
-              }
-            </Text>
-            {!searchQuery && (
-              <TouchableOpacity 
-                style={styles.findMatesButton}
-                onPress={() => router.push('/trouve1mate')}
-                activeOpacity={0.8}
-              >
-                <LinearGradient
-                  colors={['#FF8E53', '#FF6B35']}
-                  style={styles.findMatesGradient}
-                >
-                  <Ionicons name="search" size={20} color="#FFFFFF" />
-                  <Text style={styles.findMatesText}>Trouver des Mates</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            )}
           </View>
         )}
-
-        {/* Modal de suppression personnalisée NextMate */}
-        <Modal
-          visible={showDeleteModal}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={cancelDeleteConversation}
-        >
-          <View style={styles.deleteModalOverlay}>
-            <View style={styles.deleteModalContent}>
-              <View style={styles.deleteModalHeader}>
-                <Text style={styles.deleteModalTitle}>🗑️ Supprimer la conversation</Text>
-                <TouchableOpacity 
-                  style={styles.deleteCloseButton}
-                  onPress={cancelDeleteConversation}
-                >
-                  <Ionicons name="close" size={24} color="#FFFFFF80" />
-                </TouchableOpacity>
-              </View>
-              
-              <View style={styles.deleteModalBody}>
-                <View style={styles.deleteIconContainer}>
-                  <Text style={{ fontSize: 48 }}>🗑️</Text>
-                </View>
-                
-                <Text style={styles.deleteMainText}>
-                  Supprimer cette conversation ?
-                </Text>
-                
-                <Text style={styles.deleteSubText}>
-                  Cette action est irréversible. Tous les messages de cette conversation seront définitivement supprimés.
-                </Text>
-                
-                <View style={styles.deleteButtonsContainer}>
-                  <TouchableOpacity 
-                    style={styles.deleteCancelButton}
-                    onPress={cancelDeleteConversation}
-                  >
-                    <Text style={styles.deleteCancelButtonText}>Annuler</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={styles.deleteConfirmButton}
-                    onPress={confirmDeleteConversation}
-                  >
-                    <LinearGradient
-                      colors={['#EF4444', '#DC2626']}
-                      style={styles.deleteConfirmGradient}
-                    >
-                      <Ionicons name="trash" size={18} color="#FFFFFF" />
-                      <Text style={styles.deleteConfirmButtonText}>Supprimer</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </View>
-        </Modal>
-
       </LinearGradient>
+
+      {/* Barre de recherche optimisée */}
+      <Animated.View style={[styles.searchContainer, searchContainerStyle]}>
+        <View style={[styles.searchInputContainer, { backgroundColor: colors.surface }]}>
+          <Ionicons 
+            name="search" 
+            size={20} 
+            color={colors.textSecondary} 
+            style={styles.searchIcon}
+          />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text }]}
+            placeholder="Rechercher une conversation..."
+            placeholderTextColor={colors.textSecondary}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            returnKeyType="search"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity
+              onPress={() => setSearchQuery('')}
+              style={styles.clearSearchButton}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="close-circle" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </Animated.View>
+
+      {/* Liste conversations optimisée */}
+      {filteredConversations.length > 0 ? (
+        <FlatList
+          data={filteredConversations}
+          keyExtractor={(item) => item.id}
+          renderItem={renderConversationItem}
+          style={styles.conversationsList}
+          contentContainerStyle={styles.conversationsContent}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+              progressBackgroundColor={colors.surface}
+            />
+          }
+          // Optimisations performances
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          initialNumToRender={8}
+          getItemLayout={(data, index) => ({
+            length: PERFORMANCE_CONFIG.ITEM_HEIGHT,
+            offset: PERFORMANCE_CONFIG.ITEM_HEIGHT * index,
+            index,
+          })}
+          keyboardShouldPersistTaps="handled"
+        />
+      ) : (
+        <Animated.View style={[styles.emptyContainer, { opacity: fadeAnim }]}>
+          <Ionicons name="chatbubbles-outline" size={64} color={colors.textSecondary} />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>
+            {searchQuery ? 'Aucun résultat' : 'Aucune conversation'}
+          </Text>
+          <Text style={[styles.emptyMessage, { color: colors.textSecondary }]}>
+            {searchQuery 
+              ? `Aucune conversation ne correspond à "${searchQuery}"`
+              : 'Commencez à matcher pour voir vos conversations ici'
+            }
+          </Text>
+        </Animated.View>
+      )}
+
+      {/* Modal suppression optimisée */}
+      <Modal
+        visible={deleteModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setDeleteModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View style={[styles.modalContent, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              Supprimer la conversation
+            </Text>
+            <Text style={[styles.modalMessage, { color: colors.textSecondary }]}>
+              Êtes-vous sûr de vouloir supprimer cette conversation ? Cette action est irréversible.
+            </Text>
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton, { backgroundColor: colors.background }]}
+                onPress={() => {
+                  setDeleteModalVisible(false);
+                  setConversationToDelete(null);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.modalButtonText, { color: colors.text }]}>
+                  Annuler
+                </Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.modalButton, styles.deleteButtonModal, { backgroundColor: '#FF4444' }]}
+                onPress={async () => {
+                  if (conversationToDelete) {
+                    await handleDeleteConversation(conversationToDelete);
+                    setDeleteModalVisible(false);
+                    setConversationToDelete(null);
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.modalButtonText, { color: '#FFFFFF' }]}>
+                  Supprimer
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -276,312 +500,278 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  gradient: {
-    flex: 1,
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
-  },
-  headerTitle: {
-    color: '#FFFFFF',
-    fontSize: 24,
-    fontWeight: 'bold',
-  },
-  headerSubtitle: {
-    color: '#FFFFFF80',
-    fontSize: 16,
-  },
-  searchContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    height: 50,
-    gap: 10,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 16,
-  },
-  conversationsList: {
-    flex: 1,
-  },
-  conversationsContent: {
-    paddingHorizontal: 20,
-  },
-  conversationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    gap: 12,
-    borderBottomWidth: 1,
-  },
-  avatarContainer: {
-    position: 'relative',
-  },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    fontSize: 24,
-  },
-  avatarImage: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-  },
-  onlineIndicator: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#10B981',
-    borderWidth: 2,
-    borderColor: '#2F0C4D',
-  },
-  onlineIndicatorPulse: {
-    backgroundColor: '#10B981',
-    borderWidth: 2,
-    borderColor: '#2F0C4D',
-  },
-  unreadBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: '#FF6B35',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  unreadText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  conversationContent: {
-    flex: 1,
-    gap: 4,
-  },
-  conversationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  participantName: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  timestamp: {
-    color: '#FFFFFF60',
-    fontSize: 12,
-  },
-  messagePreview: {
-    gap: 4,
-  },
-  lastMessage: {
-    color: '#FFFFFF80',
-    fontSize: 14,
-    flex: 1,
-  },
-  gameStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  currentGame: {
-    color: '#FF8E53',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  gameInCommon: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(139, 92, 246, 0.2)',
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    alignSelf: 'flex-start',
-  },
-  gameInCommonText: {
-    color: '#8B5CF6',
-    fontSize: 11,
-    fontWeight: '500',
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 40,
-  },
-  emptyStateIcon: {
-    fontSize: 60,
-    marginBottom: 20,
-  },
-  emptyStateTitle: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  emptyStateSubtitle: {
-    color: '#FFFFFF80',
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: 30,
-  },
-  findMatesButton: {
-    borderRadius: 12,
-  },
-  findMatesGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
-  },
-  findMatesText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  deleteButton: {
-    padding: 8,
-    marginLeft: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  // Styles pour la modal de suppression
-  deleteModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(47, 12, 77, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  deleteModalContent: {
-    backgroundColor: '#2F0C4D',
-    borderRadius: 20,
-    width: '100%',
-    maxWidth: 400,
-    borderWidth: 2,
-    borderColor: '#EF4444',
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.15)',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 10,
+      height: 2,
     },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 20,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  deleteModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#FFFFFF20',
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
-  deleteModalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  deleteCloseButton: {
-    padding: 5,
-  },
-  deleteModalBody: {
-    padding: 20,
-    paddingTop: 10,
-  },
-  deleteIconContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  deleteMainText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 15,
-    lineHeight: 24,
-  },
-  deleteSubText: {
-    color: '#FFFFFF80',
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 25,
-    lineHeight: 20,
-  },
-  deleteButtonsContainer: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  deleteCancelButton: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    padding: 15,
-    borderRadius: 25,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#FFFFFF40',
-  },
-  deleteCancelButtonText: {
-    color: '#FFFFFF80',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  deleteConfirmButton: {
-    flex: 1,
-    borderRadius: 25,
-  },
-  deleteConfirmGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 15,
-    borderRadius: 25,
-    gap: 8,
-    shadowColor: '#EF4444',
+  globalBadgeContainer: {
+    shadowColor: '#FF8E53',
     shadowOffset: {
       width: 0,
       height: 4,
     },
     shadowOpacity: 0.3,
     shadowRadius: 8,
+    elevation: 6,
   },
-  deleteConfirmButtonText: {
-    color: '#FFFFFF',
+  searchContainer: {
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+  },
+  searchInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+  },
+  clearSearchButton: {
+    padding: 4,
+  },
+  conversationsList: {
+    flex: 1,
+  },
+  conversationsContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+  },
+  conversationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 20,
+    marginBottom: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 6,
+    minHeight: PERFORMANCE_CONFIG.ITEM_HEIGHT,
+  },
+  conversationContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  avatarContainer: {
+    marginRight: 16,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  avatarEmoji: {
+    fontSize: 38,
+  },
+  unreadBadgeContainer: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+  },
+  conversationInfo: {
+    flex: 1,
+  },
+  conversationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  participantName: {
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    flex: 1,
+    marginRight: 8,
+  },
+  unreadText: {
+    fontWeight: '800',
+  },
+  messageTime: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+    opacity: 0.8,
+  },
+  lastMessage: {
+    fontSize: 14,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+    lineHeight: 20,
+    opacity: 0.8,
+  },
+  unreadLastMessage: {
+    fontWeight: '600',
+    opacity: 1,
+  },
+  deleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+    shadowColor: '#FF4444',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  emptyTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginTop: 20,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  emptyMessage: {
+    fontSize: 16,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+    lineHeight: 24,
+    textAlign: 'center',
+    opacity: 0.8,
+  },
+  loadingText: {
+    marginTop: 16,
     fontSize: 16,
     fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    borderRadius: 24,
+    padding: 24,
+    width: '100%',
+    maxWidth: 340,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 16,
+    fontWeight: '500',
+    letterSpacing: 0.2,
+    lineHeight: 24,
+    textAlign: 'center',
+    marginBottom: 24,
+    opacity: 0.9,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cancelButton: {
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  deleteButtonModal: {
+    shadowColor: '#FF4444',
+    shadowOpacity: 0.3,
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
 }); 
