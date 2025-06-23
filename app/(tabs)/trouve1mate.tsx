@@ -1,28 +1,29 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useConversations } from '../../context/ConversationsContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useUserProfile } from '../../context/UserProfileContext';
-import { getDiscoveryUsers, type PlatformUser } from '../../services/userService';
+import { BlockingService } from '../../services/blockingService';
+import UserService, { type UserProfile } from '../../services/userService';
 
 const { width } = Dimensions.get('window');
 
 export default function Trouve1MateScreen() {
-  const [users, setUsers] = useState<PlatformUser[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +36,21 @@ export default function Trouve1MateScreen() {
     loadUsers();
   }, [currentUser]);
 
+  // 🔄 Rafraîchir automatiquement quand on revient à l'écran
+  useFocusEffect(
+    useCallback(() => {
+      // Vérifier si le cache a été invalidé (après déblocage)
+      const lastCacheInvalidation = UserService.getLastCacheInvalidation();
+      const now = Date.now();
+      
+      // Si le cache a été invalidé dans les 5 dernières secondes, recharger
+      if (lastCacheInvalidation && (now - lastCacheInvalidation) < 5000) {
+        console.log('🔄 Cache invalidé récemment, rechargement automatique...');
+        loadUsers();
+      }
+    }, [])
+  );
+
   const loadUsers = async () => {
     if (!currentUser?.uid) {
       setLoading(false);
@@ -45,13 +61,24 @@ export default function Trouve1MateScreen() {
       setError(null);
       console.log('🔍 Chargement des utilisateurs de la plateforme...');
       
+      // Vider le cache pour forcer la récupération des nouvelles données
+      UserService.clearCache();
+      console.log('🧹 Cache vidé pour récupérer les données utilisateur corrigées');
+      
       // Récupérer les jeux de l'utilisateur actuel pour un meilleur matching
       const currentUserGameNames = profile?.games?.map(game => game.name) || [];
       
-      const platformUsers = await getDiscoveryUsers(currentUser.uid, 10, currentUserGameNames);
-      setUsers(platformUsers);
+      const platformUsers = await UserService.getDiscoveryUsers(currentUser.uid);
       
-      if (platformUsers.length === 0) {
+      // 🚫 Filtrer les utilisateurs bloqués
+      const filteredUsers = await BlockingService.filterBlockedUsers(
+        currentUser.uid, 
+        platformUsers
+      );
+      
+      setUsers(filteredUsers);
+      
+      if (filteredUsers.length === 0) {
         setError('Aucun utilisateur trouvé pour le moment');
       }
       
@@ -69,12 +96,12 @@ export default function Trouve1MateScreen() {
     setRefreshing(false);
   };
 
-  const connectToUser = async (targetUser: PlatformUser) => {
+  const connectToUser = async (targetUser: UserProfile) => {
     try {
       console.log('🔄 Tentative de connexion avec:', targetUser.name);
       
       // Vérifications de sécurité
-      if (!targetUser.id || !targetUser.name) {
+      if (!targetUser.uid || !targetUser.name) {
         console.error('❌ Données utilisateur incomplètes:', targetUser);
         Alert.alert('❌ Erreur', 'Profil utilisateur incomplet');
         return;
@@ -83,9 +110,9 @@ export default function Trouve1MateScreen() {
       // Trouver un jeu en commun en utilisant les vrais jeux de l'utilisateur
       const currentUserGames = profile?.games || [];
       const currentUserGameNames = currentUserGames.map(game => game.name).filter(Boolean);
-      const targetUserGames = Array.isArray(targetUser.games) ? targetUser.games.filter(Boolean) : [];
+      const targetUserGames = targetUser.preferences?.favoriteGames || [];
       
-      const commonGames = targetUserGames.filter(game => 
+      const commonGames = targetUserGames.filter((game: string) => 
         currentUserGameNames.includes(game)
       );
       const gameInCommon = commonGames.length > 0 ? commonGames[0] : undefined;
@@ -94,18 +121,18 @@ export default function Trouve1MateScreen() {
 
       // Créer le participant pour la conversation avec des valeurs par défaut sécurisées
       const participant = {
-        id: targetUser.id,
+        id: targetUser.uid,
         name: targetUser.name,
         avatar: targetUser.avatar || '🎮',
-        isImageAvatar: targetUser.isImageAvatar,
+        isImageAvatar: targetUser.avatar?.startsWith('http') || false,
         isOnline: targetUser.isOnline || false,
-        currentGame: targetUser.currentlyPlaying || targetUserGames[0] || undefined,
+        ...(targetUserGames[0] && { currentGame: targetUserGames[0] }),
       };
 
       console.log('👤 Participant créé:', participant);
 
       // Créer la conversation (ou récupérer l'existante)
-      const conversationId = await createConversation(participant, gameInCommon);
+      const conversationId = await createConversation(participant);
       
       if (conversationId) {
         console.log('✅ Conversation créée/trouvée:', conversationId);
@@ -129,24 +156,27 @@ export default function Trouve1MateScreen() {
     }
   };
 
-  const openProfile = (targetUser: PlatformUser) => {
+  const openProfile = (targetUser: UserProfile) => {
+    const games = targetUser.preferences?.favoriteGames || [];
+    const availability = targetUser.preferences?.preferredTimeSlots || [];
+    
     const profileInfo = [
-      `🎮 Jeux: ${targetUser.games.length > 0 ? targetUser.games.join(', ') : 'Aucun jeu renseigné'}`,
-      targetUser.availability.length > 0 ? `⏰ Dispo: ${targetUser.availability.join(', ')}` : '',
-      targetUser.distance ? `📍 Distance: ${targetUser.distance}km` : '',
-      targetUser.age ? `🎂 Âge: ${targetUser.age} ans` : '',
-      targetUser.location ? `📍 Localisation: ${targetUser.location}` : '',
-      targetUser.currentlyPlaying ? `🎮 Joue actuellement: ${targetUser.currentlyPlaying}` : '',
+      games.length > 0 ? `🎮 Jeux: ${games.join(', ')}` : '',
+      availability.length > 0 ? `⏰ Dispo: ${availability.join(', ')}` : '',
+      targetUser.preferences?.location ? `📍 Localisation: ${targetUser.preferences.location}` : '',
+      targetUser.preferences?.ageRange ? `🎂 Âge: ${targetUser.preferences.ageRange} ans` : '',
     ].filter(Boolean).join('\n');
+
+    const bioText = targetUser.preferences?.bio ? `\n\n"${targetUser.preferences.bio}"` : '';
 
     Alert.alert(
       `Profil de ${targetUser.name}`,
-      `${profileInfo}\n\n"${targetUser.bio || 'Aucune bio disponible'}"`,
+      profileInfo + bioText,
       [{ text: 'Fermer', style: 'default' }]
     );
   };
 
-  const renderUserCard = ({ item }: { item: PlatformUser }) => (
+  const renderUserCard = ({ item }: { item: UserProfile }) => (
     <View style={[styles.mateCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <LinearGradient
         colors={['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']}
@@ -156,17 +186,16 @@ export default function Trouve1MateScreen() {
         <View style={styles.mateHeader}>
           <View style={styles.avatarSection}>
             <View style={[styles.avatarCircle, { backgroundColor: item.isOnline ? 'rgba(16, 185, 129, 0.2)' : 'rgba(107, 114, 128, 0.2)' }]}>
-              {item.isImageAvatar ? (
+              {item.avatar?.startsWith('http') || item.avatar?.includes('cloudinary') ? (
                 <Image 
                   source={{ uri: item.avatar }} 
                   style={styles.avatarImage}
-                  defaultSource={{ uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==' }}
                   onError={() => {
                     console.log('❌ Erreur chargement avatar trouve1mate:', item.avatar);
                   }}
                 />
               ) : (
-                <Text style={styles.avatarEmoji}>{item.avatar}</Text>
+                <Text style={styles.avatarEmoji}>{item.avatar || '🎮'}</Text>
               )}
             </View>
             {item.isOnline && <View style={[styles.onlineIndicator, styles.onlineIndicatorPulse]} />}
@@ -175,38 +204,38 @@ export default function Trouve1MateScreen() {
           <View style={styles.mateInfo}>
             <View style={styles.nameRow}>
               <Text style={[styles.mateName, { color: colors.text }]}>{item.name}</Text>
-              {item.age && <Text style={[styles.mateAge, { color: colors.textSecondary }]}>{item.age} ans</Text>}
+              {item.preferences?.ageRange && <Text style={[styles.mateAge, { color: colors.textSecondary }]}>{item.preferences.ageRange} ans</Text>}
             </View>
-            {item.distance && (
-              <Text style={[styles.mateDistance, { color: colors.textSecondary }]}>📍 {item.distance} km</Text>
+            {item.preferences?.location && (
+              <Text style={[styles.mateDistance, { color: colors.textSecondary }]}>📍 {item.preferences.location}</Text>
             )}
-            {item.matchPercentage && (
-              <View style={styles.matchContainer}>
-                <Text style={[styles.matchText, { color: colors.textSecondary }]}>{item.matchPercentage}% match</Text>
-                <View style={styles.matchBar}>
-                  <View style={[styles.matchFill, { width: `${item.matchPercentage}%` }]} />
-                </View>
-              </View>
-            )}
+            <View style={styles.matchContainer}>
+              <Text style={[styles.matchText, { color: colors.textSecondary }]}>⭐ Rating: {item.stats.rating}</Text>
+              <Text style={[styles.matchText, { color: colors.textSecondary }]}>🎮 {item.stats.totalGames} jeux</Text>
+            </View>
           </View>
         </View>
 
         {/* Bio */}
-        <Text style={[styles.mateBio, { color: colors.textSecondary }]}>{item.bio || 'Aucune bio disponible'}</Text>
+        {item.preferences?.bio && (
+          <Text style={[styles.mateBio, { color: colors.textSecondary }]}>
+            {item.preferences.bio}
+          </Text>
+        )}
 
         {/* Jeux */}
-        {item.games.length > 0 && (
+        {item.preferences?.favoriteGames && item.preferences.favoriteGames.length > 0 && (
           <View style={styles.gamesSection}>
             <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>🎮 Jeux favoris</Text>
             <View style={styles.gamesList}>
-              {item.games.slice(0, 4).map((game, index) => (
+              {item.preferences.favoriteGames.slice(0, 4).map((game, index) => (
                 <View key={index} style={[styles.gameTag, { backgroundColor: colors.surface }]}>
                   <Text style={[styles.gameText, { color: colors.textSecondary }]}>{game}</Text>
                 </View>
               ))}
-              {item.games.length > 4 && (
+              {item.preferences.favoriteGames.length > 4 && (
                 <View style={[styles.gameTag, { backgroundColor: colors.surface }]}>
-                  <Text style={[styles.gameText, { color: colors.textSecondary }]}>+{item.games.length - 4}</Text>
+                  <Text style={[styles.gameText, { color: colors.textSecondary }]}>+{item.preferences.favoriteGames.length - 4}</Text>
                 </View>
               )}
             </View>
@@ -214,18 +243,18 @@ export default function Trouve1MateScreen() {
         )}
 
         {/* Disponibilités */}
-        {item.availability.length > 0 && (
+        {item.preferences?.preferredTimeSlots && item.preferences.preferredTimeSlots.length > 0 && (
           <View style={styles.availabilitySection}>
             <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>⏰ Disponibilités</Text>
             <View style={styles.timesList}>
-              {item.availability.slice(0, 3).map((time, index) => (
+              {item.preferences.preferredTimeSlots.slice(0, 3).map((time, index) => (
                 <View key={index} style={[styles.timeTag, { backgroundColor: colors.surface }]}>
                   <Text style={[styles.timeText, { color: colors.textSecondary }]}>{time}</Text>
                 </View>
               ))}
-              {item.availability.length > 3 && (
+              {item.preferences.preferredTimeSlots.length > 3 && (
                 <View style={[styles.timeTag, { backgroundColor: colors.surface }]}>
-                  <Text style={[styles.timeText, { color: colors.textSecondary }]}>+{item.availability.length - 3}</Text>
+                  <Text style={[styles.timeText, { color: colors.textSecondary }]}>+{item.preferences.preferredTimeSlots.length - 3}</Text>
                 </View>
               )}
             </View>
@@ -233,11 +262,11 @@ export default function Trouve1MateScreen() {
         )}
 
         {/* Statut de jeu actuel */}
-        {item.currentlyPlaying && (
+        {item.preferences?.favoriteGames && item.preferences.favoriteGames.length > 0 && (
           <View style={styles.currentGameSection}>
             <Ionicons name="game-controller" size={16} color="#FF8E53" />
             <Text style={[styles.currentGameText, { color: colors.textSecondary }]}>
-              Joue à {item.currentlyPlaying}
+              Jeu favori: {item.preferences.favoriteGames[0]}
             </Text>
           </View>
         )}
@@ -327,19 +356,21 @@ export default function Trouve1MateScreen() {
         <FlatList
           data={users}
           renderItem={renderUserCard}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.uid || `user-${item.name}-${Math.random()}`}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
           refreshing={refreshing}
           onRefresh={refreshUsers}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyEmoji}>🎮</Text>
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>Aucun mate trouvé</Text>
-              <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                Tire vers le bas pour actualiser ou reviens plus tard !
-              </Text>
-            </View>
+            !loading && !refreshing ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyEmoji}>🎮</Text>
+                <Text style={[styles.emptyTitle, { color: colors.text }]}>Aucun mate trouvé</Text>
+                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                  Tire vers le bas pour actualiser ou reviens plus tard !
+                </Text>
+              </View>
+            ) : null
           }
         />
       </LinearGradient>

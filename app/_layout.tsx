@@ -2,25 +2,20 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
 import Toast from 'react-native-toast-message';
 import { toastConfig } from '../components/NextMateToast';
+import { AppConfigProvider } from '../context/AppConfigContext';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ConversationsProvider } from '../context/ConversationsContext';
+import { BadgeNotificationProvider } from '../context/NotificationContext';
 import { ThemeProvider } from '../context/ThemeContext';
 import { UserProfileProvider } from '../context/UserProfileContext';
 
 // 🔇 Supprime le warning Firebase AsyncStorage spécifique
 const originalWarn = console.warn;
-console.warn = (...args) => {
-  const message = args[0];
-  if (
-    typeof message === 'string' && 
-    message.includes('@firebase/auth') && 
-    message.includes('AsyncStorage')
-  ) {
-    // Ignore ce warning spécifique
+console.warn = (message, ...args) => {
+  if (typeof message === 'string' && message.includes('AsyncStorage has been extracted from react-native')) {
     return;
   }
-  // Garde tous les autres warnings
-  originalWarn(...args);
+  originalWarn(message, ...args);
 };
 
 // 🔄 Composant de navigation avec redirection auth
@@ -51,6 +46,7 @@ function RootLayoutNav() {
     >
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="chat/[id]" />
       <Stack.Screen name="+not-found" />
     </Stack>
   );
@@ -58,15 +54,19 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <UserProfileProvider>
-        <ConversationsProvider>
-          <ThemeProvider>
-            <RootLayoutNav />
-            <Toast config={toastConfig} />
-          </ThemeProvider>
-        </ConversationsProvider>
-      </UserProfileProvider>
-    </AuthProvider>
+    <AppConfigProvider>
+      <AuthProvider>
+        <UserProfileProvider>
+          <BadgeNotificationProvider>
+            <ConversationsProvider>
+              <ThemeProvider>
+                <RootLayoutNav />
+                <Toast config={toastConfig} />
+              </ThemeProvider>
+            </ConversationsProvider>
+          </BadgeNotificationProvider>
+        </UserProfileProvider>
+      </AuthProvider>
+    </AppConfigProvider>
   );
 }

@@ -1,11 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, View } from 'react-native';
+import { NotificationBadge } from '../../components/NotificationBadge';
+import { useConversations } from '../../context/ConversationsContext';
+import { useBadgeNotifications } from '../../context/NotificationContext';
 import { useTheme } from '../../context/ThemeContext';
 
 export default function TabLayout() {
   const { isDarkMode, colors } = useTheme();
+  const { totalUnreadCount } = useBadgeNotifications();
+  const { conversations } = useConversations();
+  
+  // 📊 Calcul du nombre de conversations avec messages non lus
+  const realTimeUnreadCount = conversations.filter(conversation => {
+    return (conversation.unreadCount || 0) > 0;
+  }).length;
+  
+  // Debug désactivé pour réduire le spam console
+  // console.log('📊 Unread count toolbar:', realTimeUnreadCount, 'conversations:', conversations.length);
   
   return (
     <Tabs
@@ -59,7 +72,16 @@ export default function TabLayout() {
         options={{
           title: 'Chat',
           tabBarIcon: ({ color }: { color: string }) => (
-            <Ionicons name="chatbubbles" size={24} color={color} />
+            <View style={{ position: 'relative' }}>
+              <Ionicons name="chatbubbles" size={24} color={color} />
+              <NotificationBadge
+                count={realTimeUnreadCount}
+                isVisible={realTimeUnreadCount > 0}
+                type="message"
+                size="small"
+                position="topRight"
+              />
+            </View>
           ),
         }}
       />

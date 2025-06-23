@@ -1,18 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
-    Alert,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Switch,
-    Text,
-    TouchableOpacity,
-    View,
+  Alert,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
+import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { BlockingService, type BlockedUser } from '../../services/blockingService';
 
 interface SettingItem {
   id: string;
@@ -26,8 +28,29 @@ interface SettingItem {
 }
 
 export default function ParametresScreen() {
-  const [notifications, setNotifications] = useState(true);
   const { isDarkMode, toggleTheme, colors } = useTheme();
+  const { deleteAccount, user } = useAuth();
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState<BlockedUser[]>([]);
+
+  useEffect(() => {
+    if (user?.uid) {
+      loadBlockedUsers();
+    }
+  }, [user]);
+
+  const loadBlockedUsers = async () => {
+    if (!user?.uid) return;
+    
+    try {
+      const blocked = await BlockingService.getBlockedUsers(user.uid);
+      setBlockedUsers(blocked);
+    } catch (error) {
+      console.error('❌ Erreur chargement utilisateurs bloqués:', error);
+    }
+  };
+
+
 
   const handleDeleteAccount = () => {
     Alert.alert(
@@ -42,16 +65,13 @@ export default function ParametresScreen() {
             // Confirmation finale
             Alert.alert(
               'Confirmation finale',
-              'Tapez "SUPPRIMER" pour confirmer la suppression de votre compte.',
+              'Dernière chance ! Cette action supprimera :\n\n• Votre profil et toutes vos données\n• Toutes vos conversations et messages\n• Vos matches et préférences\n• Votre compte Firebase\n\nTapez "SUPPRIMER" pour confirmer.',
               [
                 { text: 'Annuler', style: 'cancel' },
                 { 
                   text: 'SUPPRIMER', 
                   style: 'destructive',
-                  onPress: () => {
-                    Alert.alert('Compte supprimé', 'Votre compte a été supprimé avec succès.');
-                    router.replace('/login');
-                  }
+                  onPress: performAccountDeletion
                 }
               ]
             );
@@ -61,21 +81,62 @@ export default function ParametresScreen() {
     );
   };
 
+  const performAccountDeletion = async () => {
+    setIsDeletingAccount(true);
+    
+    try {
+      // Afficher un indicateur de progression
+      Alert.alert(
+        '🗑️ Suppression en cours...',
+        'Suppression de vos données. Cela peut prendre quelques secondes.',
+        [],
+        { cancelable: false }
+      );
+
+      const result = await deleteAccount();
+      
+      if (result.success) {
+        // Succès - redirection automatique via AuthContext
+        Alert.alert(
+          '✅ Compte supprimé',
+          'Votre compte NextMate a été complètement supprimé. Toutes vos données ont été effacées.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Redirection forcée vers login
+                router.replace('/(auth)/login');
+              }
+            }
+          ],
+          { cancelable: false }
+        );
+      } else {
+        // Erreur
+        Alert.alert(
+          '❌ Erreur de suppression',
+          result.error || 'Impossible de supprimer le compte. Réessayez plus tard.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('❌ Erreur suppression compte:', error);
+      Alert.alert(
+        '❌ Erreur inattendue',
+        'Une erreur inattendue s\'est produite. Vérifiez votre connexion et réessayez.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsDeletingAccount(false);
+    }
+  };
+
   const appSettings: SettingItem[] = [
-    {
-      id: 'notifications',
-      title: 'Notifications',
-      subtitle: 'Messages, matches, invitations',
-      icon: 'notifications',
-      type: 'toggle',
-      value: notifications,
-      onToggle: setNotifications,
-    },
     {
       id: 'dark-mode',
       title: 'Mode sombre',
       subtitle: 'Interface sombre ou claire',
-      icon: 'moon',
+      icon: isDarkMode ? 'moon' : 'sunny',
       type: 'toggle',
       value: isDarkMode,
       onToggle: toggleTheme,
@@ -86,10 +147,10 @@ export default function ParametresScreen() {
     {
       id: 'blocked-users',
       title: 'Utilisateurs bloqués',
-      subtitle: 'Gérer les comptes bloqués',
+      subtitle: `${blockedUsers.length} utilisateur${blockedUsers.length > 1 ? 's' : ''} bloqué${blockedUsers.length > 1 ? 's' : ''}`,
       icon: 'ban',
       type: 'navigation',
-      onPress: () => Alert.alert('Bloqués', 'Liste des utilisateurs bloqués'),
+      onPress: () => router.push('/blocked-users'),
     },
     {
       id: 'privacy-policy',
@@ -119,7 +180,7 @@ export default function ParametresScreen() {
     {
       id: 'contact',
       title: 'Nous contacter',
-      subtitle: 'Support technique',
+      subtitle: 'support@nextmate.app',
       icon: 'mail',
       type: 'navigation',
       onPress: () => Alert.alert('Contact', 'support@nextmate.app'),
@@ -132,16 +193,17 @@ export default function ParametresScreen() {
       type: 'navigation',
       onPress: () => Alert.alert('Avis', 'Merci pour votre feedback !'),
     },
+
   ];
 
   const dangerSettings: SettingItem[] = [
     {
       id: 'delete-account',
-      title: 'Supprimer le compte',
-      subtitle: 'Action irréversible',
-      icon: 'trash',
+      title: isDeletingAccount ? 'Suppression...' : 'Supprimer le compte',
+      subtitle: isDeletingAccount ? 'Suppression en cours...' : 'Action irréversible',
+      icon: isDeletingAccount ? 'hourglass' : 'trash',
       type: 'danger',
-      onPress: handleDeleteAccount,
+      onPress: isDeletingAccount ? undefined : handleDeleteAccount,
     },
   ];
 
@@ -151,10 +213,12 @@ export default function ParametresScreen() {
       style={[
         styles.settingItem,
         { borderBottomColor: colors.border },
-        item.type === 'danger' && styles.dangerItem
+        item.type === 'danger' && styles.dangerItem,
+        isDeletingAccount && item.id === 'delete-account' && styles.disabledItem
       ]}
-      onPress={item.onPress}
-      activeOpacity={0.7}
+      onPress={item.type === 'toggle' ? undefined : item.onPress}
+      activeOpacity={item.type === 'toggle' ? 1 : 0.7}
+      disabled={isDeletingAccount && item.id === 'delete-account'}
     >
       <View style={styles.settingLeft}>
         <View style={[
@@ -187,8 +251,9 @@ export default function ParametresScreen() {
           <Switch
             value={item.value}
             onValueChange={item.onToggle}
-            trackColor={{ false: '#374151', true: colors.secondary }}
+            trackColor={{ false: '#374151', true: colors.primary }}
             thumbColor={item.value ? '#FFFFFF' : '#9CA3AF'}
+            ios_backgroundColor="#374151"
           />
         ) : (
           <Ionicons 
@@ -209,6 +274,8 @@ export default function ParametresScreen() {
       </View>
     </View>
   );
+
+
 
   return (
     <View style={styles.container}>
@@ -239,6 +306,8 @@ export default function ParametresScreen() {
           </View>
         </ScrollView>
       </LinearGradient>
+
+
     </View>
   );
 }
@@ -259,6 +328,10 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: 'bold',
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    marginTop: 4,
   },
   scrollView: {
     flex: 1,
@@ -324,6 +397,9 @@ const styles = StyleSheet.create({
   dangerItem: {
     backgroundColor: 'rgba(239, 68, 68, 0.1)',
   },
+  disabledItem: {
+    opacity: 0.5,
+  },
   settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -370,4 +446,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
+  tokenText: {
+    fontSize: 10,
+    marginTop: 8,
+    fontFamily: 'monospace',
+  },
+
 }); 
