@@ -1,217 +1,425 @@
-import { collection, getDocs, limit, query } from 'firebase/firestore';
+import {
+    collection,
+    doc,
+    getDoc,
+    getDocs,
+    limit,
+    query,
+    setDoc,
+    updateDoc
+} from 'firebase/firestore';
 import { db } from '../config/firebase';
-import ImageService from './imageService';
+import cacheManager from '../utils/cacheManager';
+import { cleanObjectForFirestore, safeTimestampToDate } from '../utils/firebaseHelpers';
+import logger from '../utils/logger';
+import AppConfigService from './appConfigService';
+import { BlockingService } from './blockingService';
 
-// 🎮 Interface pour les utilisateurs de la plateforme
-export interface PlatformUser {
-  id: string;
+// Configuration optimisée - PERFORMANCE AMÉLIORÉE
+const PERFORMANCE_CONFIG = {
+  CACHE_DURATION: 15 * 60 * 1000, // 15 minutes (au lieu de 3)
+  BATCH_SIZE: 15, // Taille optimale des batches
+  MAX_RETRIES: 1, // Réduit de 2 à 1
+  RETRY_DELAY: 1000, // 1 seconde (au lieu de 500ms)
+  DISCOVERY_LIMIT: 20, // Limite des utilisateurs découverte
+  POPULAR_GAMES_CACHE: 10 * 60 * 1000, // 10 minutes (au lieu de 2)
+};
+
+// Types optimisés
+export interface UserProfile {
+  uid: string;
+  email: string;
   name: string;
   avatar: string;
-  isImageAvatar?: boolean; // Indique si l'avatar est une image ou un emoji
-  age?: number;
-  games: string[];
-  availability: string[];
-  bio?: string;
-  distance?: number;
+  preferences: {
+    favoriteGames: string[];
+    preferredTimeSlots: string[];
+    gameRanks: { [gameId: string]: string };
+    gameStyles: string[];
+    bio?: string;
+    ageRange?: string;
+    location?: string;
+  };
+  stats: {
+    totalMatches: number;
+    totalGames: number;
+    joinDate: Date;
+    lastActive: Date;
+    rating: number;
+  };
   isOnline: boolean;
-  matchPercentage?: number;
-  location?: string;
-  currentlyPlaying?: string;
-  profileComplete: boolean;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-// 🔍 Récupérer les utilisateurs de la plateforme pour la découverte
-export const getDiscoveryUsers = async (
-  currentUserId: string, 
-  maxUsers: number = 10,
-  currentUserGames: string[] = []
-): Promise<PlatformUser[]> => {
-  try {
-    console.log('🔍 Récupération des utilisateurs pour la découverte...');
-    
-    // Query pour récupérer les utilisateurs (excluant l'utilisateur actuel)
-    const usersQuery = query(
-      collection(db, 'users'),
-      // where('profileComplete', '==', true), // Temporairement commenté pour récupérer tous les users
-      // orderBy('lastSeen', 'desc'), // Temporairement commenté en attendant l'index
-      limit(maxUsers + 5) // On prend plus pour filtrer ensuite
-    );
+// Service utilisateur optimisé avec nouveau système de cache
+export class UserService {
+  private static lastCacheInvalidation: number = 0;
 
-    const snapshot = await getDocs(usersQuery);
-    const users: PlatformUser[] = [];
+  // 👤 Créer ou mettre à jour un profil utilisateur avec optimisations
+  static async createOrUpdateProfile(
+    uid: string, 
+    email: string, 
+    additionalData: Partial<UserProfile> = {}
+  ): Promise<UserProfile> {
+    try {
+      logger.info('UserService', `Création/mise à jour profil: ${uid}`);
 
-    snapshot.docs.forEach(doc => {
-      const data = doc.data();
+      // Vérifier si l'utilisateur existe déjà
+      const existingProfile = await this.getUserProfile(uid, false); // Sans cache pour création
+
+      const now = new Date();
+      const defaultProfile: Omit<UserProfile, 'uid'> = {
+        email,
+        name: additionalData.name || email.split('@')[0] || 'Joueur',
+        avatar: this.getRandomGamingAvatar(),
+        preferences: {
+          favoriteGames: [],
+          preferredTimeSlots: [],
+          gameRanks: {},
+          gameStyles: [],
+          bio: '',
+          ageRange: '18-25',
+          location: 'France',
+        },
+        stats: {
+          totalMatches: 0,
+          totalGames: 0,
+          joinDate: existingProfile?.stats.joinDate || now,
+          lastActive: now,
+          rating: 1000, // Rating ELO de base
+        },
+        isOnline: true,
+        createdAt: existingProfile?.createdAt || now,
+        updatedAt: now,
+      };
+
+      const profileData: UserProfile = {
+        uid,
+        ...defaultProfile,
+        ...additionalData,
+        stats: {
+          ...defaultProfile.stats,
+          ...additionalData.stats,
+        },
+        preferences: {
+          ...defaultProfile.preferences,
+          ...additionalData.preferences,
+        },
+      };
+
+      // Nettoyer les données pour Firestore
+      const cleanedData = cleanObjectForFirestore(profileData);
       
-      // Exclure l'utilisateur actuel
-      if (doc.id === currentUserId) return;
+      // Sauvegarder dans Firestore
+      await setDoc(doc(db, 'users', uid), cleanedData, { merge: true });
       
-      // Calculer le pourcentage de match basé sur les jeux en commun avec l'utilisateur actuel
-      const matchPercentage = calculateMatchPercentage(data.games || [], currentUserGames);
+      // Mettre à jour le cache centralisé
+      cacheManager.set('userProfiles', `profile_${uid}`, profileData);
       
-      // Gérer l'avatar intelligemment avec ImageService
-      let userAvatar = '🎮'; // Avatar par défaut
-      let isImageAvatar = false;
-      
-      if (data.profilePicture) {
-        const avatarType = ImageService.detectAvatarType(data.profilePicture);
-        
-        if (['cloudinary', 'firebase', 'url', 'local'].includes(avatarType)) {
-          // Image Cloudinary, Firebase, URL publique ou locale
-          userAvatar = data.profilePicture;
-          isImageAvatar = true;
-        } else {
-          // Emoji ou autre
-          userAvatar = data.profilePicture;
-          isImageAvatar = false;
-        }
-      } else if (data.avatar) {
-        const avatarType = ImageService.detectAvatarType(data.avatar);
-        userAvatar = data.avatar;
-        isImageAvatar = ['cloudinary', 'firebase', 'url', 'local'].includes(avatarType);
-      } else if (Array.isArray(data.games) && data.games.length > 0) {
-        // Utiliser l'icône du premier jeu comme fallback
-        const firstGame = data.games[0];
-        if (typeof firstGame === 'object' && firstGame.icon) {
-          userAvatar = firstGame.icon;
+      logger.firebase('createOrUpdate', 'users', 'success', { uid });
+      return profileData;
+
+    } catch (error) {
+      logger.error('UserService', 'Erreur création/mise à jour profil', error);
+      throw new Error('Impossible de créer ou mettre à jour le profil utilisateur');
+    }
+  }
+
+  // 🔍 Récupérer profil utilisateur avec cache optimisé
+  static async getUserProfile(uid: string, useCache: boolean = true): Promise<UserProfile | null> {
+    try {
+      // Essayer le cache d'abord si demandé
+      if (useCache) {
+        const cached = cacheManager.get<UserProfile>('userProfiles', `profile_${uid}`, PERFORMANCE_CONFIG.CACHE_DURATION);
+        if (cached) {
+          logger.cache('hit', `userProfiles:profile_${uid}`);
+          return cached;
         }
       }
 
-      const user: PlatformUser = {
-        id: doc.id,
-        name: data.pseudo || data.displayName || `Gamer_${doc.id.slice(0, 6)}`,
-        avatar: userAvatar,
-        isImageAvatar,
-        age: data.age,
-        games: Array.isArray(data.games) 
-          ? data.games.map(game => typeof game === 'string' ? game : game.name || game.id)
-          : [],
-        availability: data.availability || [],
-        bio: data.bio || 'Aucune bio renseignée',
-        distance: data.distance || undefined,
+      logger.debug('UserService', `Récupération profil depuis Firebase: ${uid}`);
+
+      const docRef = doc(db, 'users', uid);
+      const docSnap = await getDoc(docRef);
+
+      if (!docSnap.exists()) {
+        logger.warn('UserService', `Profil utilisateur non trouvé: ${uid}`);
+        return null;
+      }
+
+      const data = docSnap.data();
+      const profile: UserProfile = {
+        uid,
+        email: data.email || '',
+        name: data.pseudo || data.name || 'Joueur',
+        avatar: data.profilePicture || data.avatar || '🎮',
+        preferences: {
+          favoriteGames: data.games?.map((game: any) => game.name).filter(Boolean) || data.preferences?.favoriteGames || [],
+          preferredTimeSlots: Array.isArray(data.availability) ? data.availability : data.availability?.flatMap((slot: any) => slot.timeSlots) || data.preferences?.preferredTimeSlots || [],
+          gameRanks: data.preferences?.gameRanks || {},
+          gameStyles: data.gamingStyle?.personality || data.preferences?.gameStyles || [],
+          bio: data.bio || data.preferences?.bio,
+          ageRange: data.age ? `${data.age}` : data.preferences?.ageRange,
+          location: data.location || data.preferences?.location,
+        },
+        stats: {
+          totalMatches: data.stats?.totalMatches || 0,
+          totalGames: data.stats?.totalGames || 0,
+          joinDate: safeTimestampToDate(data.stats?.joinDate) || new Date(),
+          lastActive: safeTimestampToDate(data.stats?.lastActive) || new Date(),
+          rating: data.stats?.rating || 1000,
+        },
         isOnline: data.isOnline || false,
-        matchPercentage,
-        location: data.location,
-        currentlyPlaying: data.currentlyPlaying,
-        profileComplete: data.profileComplete || false,
+        createdAt: safeTimestampToDate(data.createdAt) || new Date(),
+        updatedAt: safeTimestampToDate(data.updatedAt) || new Date(),
       };
+
+      // Mettre en cache
+      cacheManager.set('userProfiles', `profile_${uid}`, profile);
       
-      users.push(user);
-    });
+      logger.firebase('get', 'users', 'success', { uid });
+      return profile;
 
-    // Trier par pourcentage de match décroissant
-    const sortedUsers = users.sort((a, b) => (b.matchPercentage || 0) - (a.matchPercentage || 0));
-    
-    // Limiter au nombre demandé
-    const limitedUsers = sortedUsers.slice(0, maxUsers);
-    
-    console.log(`✅ ${limitedUsers.length} utilisateurs récupérés pour la découverte`);
-    return limitedUsers;
-    
-  } catch (error) {
-    console.error('❌ Erreur récupération utilisateurs:', error);
-    
-    // En cas d'erreur, retourner des utilisateurs de fallback
-    return generateFallbackUsers(maxUsers);
+    } catch (error) {
+      logger.error('UserService', 'Erreur récupération profil', error);
+      return null;
+    }
   }
-};
 
-// 🎯 Calculer le pourcentage de match basé sur les jeux
-const calculateMatchPercentage = (userGames: string[], currentUserGames: string[]): number => {
-  // Si pas de jeux de l'utilisateur actuel, utiliser les jeux populaires
-  const referenceGames = currentUserGames.length > 0 ? currentUserGames : 
-    ['Valorant', 'League of Legends', 'CS2', 'FIFA', 'Fortnite', 'Rocket League'];
-  
-  if (!userGames || userGames.length === 0) {
-    return 60 + Math.floor(Math.random() * 20); // 60-80% par défaut
+  // 🎯 Découverte d'utilisateurs avec filtrage et blocage
+  static async getDiscoveryUsers(
+    currentUserId: string, 
+    filters: {
+      favoriteGames?: string[];
+      preferredTimeSlots?: string[];
+      gameStyles?: string[];
+      minRating?: number;
+      maxRating?: number;
+    } = {}
+  ): Promise<UserProfile[]> {
+    try {
+      const startTime = Date.now();
+      
+      // Vérifier le cache d'abord
+      const cacheKey = `discovery_${currentUserId}_${JSON.stringify(filters)}`;
+      const cached = cacheManager.get<UserProfile[]>('discovery', cacheKey, PERFORMANCE_CONFIG.CACHE_DURATION);
+      if (cached) {
+        logger.cache('hit', `discovery:${cacheKey}`);
+        return cached;
+      }
+
+      logger.info('UserService', 'Récupération utilisateurs découverte avec filtres', filters);
+
+      // Construction de la requête de base
+      let baseQuery = query(
+        collection(db, 'users'),
+        // where('isOnline', '==', true), // NOTE: Filtre désactivé pour afficher tous les utilisateurs
+        limit(PERFORMANCE_CONFIG.DISCOVERY_LIMIT * 2) // Plus d'utilisateurs pour filtrer
+      );
+
+      const snapshot = await getDocs(baseQuery);
+      let users: UserProfile[] = [];
+
+      // Traitement par batch pour optimiser
+      const docs = snapshot.docs;
+      for (let i = 0; i < docs.length; i += PERFORMANCE_CONFIG.BATCH_SIZE) {
+        const batch = docs.slice(i, i + PERFORMANCE_CONFIG.BATCH_SIZE);
+        
+        const batchUsers = batch
+          .filter(doc => doc.id !== currentUserId) // Exclure l'utilisateur actuel
+          .map(doc => {
+            const data = doc.data();
+            
+
+            
+            return {
+              uid: doc.id,
+              email: data.email || '',
+              name: data.pseudo || data.name || 'Joueur',
+              avatar: data.profilePicture || data.avatar || '🎮',
+              preferences: {
+                favoriteGames: data.games?.map((game: any) => game.name).filter(Boolean) || data.preferences?.favoriteGames || [],
+                preferredTimeSlots: Array.isArray(data.availability) ? data.availability : data.availability?.flatMap((slot: any) => slot.timeSlots) || data.preferences?.preferredTimeSlots || [],
+                gameRanks: data.preferences?.gameRanks || {},
+                gameStyles: data.gamingStyle?.personality || data.preferences?.gameStyles || [],
+                bio: data.bio || data.preferences?.bio,
+                ageRange: data.age ? `${data.age}` : data.preferences?.ageRange,
+                location: data.location || data.preferences?.location,
+              },
+              stats: {
+                totalMatches: data.stats?.totalMatches || 0,
+                totalGames: data.stats?.totalGames || 0,
+                joinDate: safeTimestampToDate(data.stats?.joinDate) || new Date(),
+                lastActive: safeTimestampToDate(data.stats?.lastActive) || new Date(),
+                rating: data.stats?.rating || 1000,
+              },
+              isOnline: data.isOnline || false,
+              createdAt: safeTimestampToDate(data.createdAt) || new Date(),
+              updatedAt: safeTimestampToDate(data.updatedAt) || new Date(),
+            } as UserProfile;
+          });
+
+        users.push(...batchUsers);
+      }
+
+      // Filtrage avancé
+      const filteredUsers = users.filter(user => {
+        // Filtre jeux favoris
+        if (filters.favoriteGames?.length) {
+          const hasCommonGame = user.preferences.favoriteGames.some(game => 
+            filters.favoriteGames!.includes(game)
+          );
+          if (!hasCommonGame) return false;
+        }
+
+        // Filtre créneaux horaires
+        if (filters.preferredTimeSlots?.length) {
+          const hasCommonTimeSlot = user.preferences.preferredTimeSlots.some(slot => 
+            filters.preferredTimeSlots!.includes(slot)
+          );
+          if (!hasCommonTimeSlot) return false;
+        }
+
+        // Filtre styles de jeu
+        if (filters.gameStyles?.length) {
+          const hasCommonStyle = user.preferences.gameStyles.some(style => 
+            filters.gameStyles!.includes(style)
+          );
+          if (!hasCommonStyle) return false;
+        }
+
+        // Filtre rating
+        if (filters.minRating && user.stats.rating < filters.minRating) return false;
+        if (filters.maxRating && user.stats.rating > filters.maxRating) return false;
+
+        return true;
+      });
+
+      // Filtrer les utilisateurs bloqués
+      const finalUsers = await BlockingService.filterBlockedUsers(currentUserId, filteredUsers);
+
+      // Limiter le résultat
+      const limitedUsers = finalUsers.slice(0, PERFORMANCE_CONFIG.DISCOVERY_LIMIT);
+      
+      // Mettre en cache
+      cacheManager.set('discovery', cacheKey, limitedUsers);
+
+      const duration = Date.now() - startTime;
+      logger.performance('Discovery Users Load', duration, {
+        totalFound: users.length,
+        afterFilter: filteredUsers.length,
+        afterBlocking: finalUsers.length,
+        returned: limitedUsers.length
+      });
+
+      return limitedUsers;
+
+    } catch (error) {
+      logger.error('UserService', 'Erreur récupération utilisateurs découverte', error);
+      return [];
+    }
   }
-  
-  // Calculer les jeux en commun
-  const commonGames = userGames.filter(game => referenceGames.includes(game));
-  
-  if (commonGames.length === 0) {
-    return 50 + Math.floor(Math.random() * 20); // 50-70% si aucun jeu en commun
+
+  // 🔄 Mise à jour préférences utilisateur
+  static async updateUserPreferences(
+    uid: string, 
+    preferences: Partial<UserProfile['preferences']>
+  ): Promise<void> {
+    try {
+      logger.info('UserService', `Mise à jour préférences: ${uid}`);
+
+      const userRef = doc(db, 'users', uid);
+      await updateDoc(userRef, {
+        preferences: {
+          ...preferences,
+        },
+        updatedAt: new Date(),
+      });
+
+      // Invalider le cache
+      cacheManager.invalidateKey('userProfiles', `profile_${uid}`);
+      cacheManager.invalidateCache('discovery'); // Invalider aussi discovery
+
+      logger.firebase('update', 'user_preferences', 'success', { uid });
+    } catch (error) {
+      logger.error('UserService', 'Erreur mise à jour préférences', error);
+      throw new Error('Impossible de mettre à jour les préférences utilisateur');
+    }
   }
-  
-  // Calcul basé sur le nombre de jeux en commun
-  const baseMatch = Math.min(commonGames.length * 20, 80); // 20% par jeu commun, max 80%
-  const randomBonus = Math.floor(Math.random() * 15); // Bonus aléatoire 0-15%
-  
-  return Math.min(baseMatch + randomBonus + 5, 100); // Minimum 5%, maximum 100%
-};
 
-// 🎮 Avatars gaming aléatoires
-const getRandomGamingAvatar = (): string => {
-  const avatars = ['🎮', '⚔️', '🔫', '⚽', '🏎️', '🎯', '🏆', '🎲', '🕹️', '🎪', '🎭', '🎨', '🎸', '🎤', '🎧'];
-  return avatars[Math.floor(Math.random() * avatars.length)];
-};
+  // 📊 Mise à jour statistiques utilisateur
+  static async updateUserStats(
+    uid: string, 
+    statsUpdate: Partial<UserProfile['stats']>
+  ): Promise<void> {
+    try {
+      logger.debug('UserService', `Mise à jour stats: ${uid}`);
 
-// 🆘 Utilisateurs de fallback en cas d'erreur Firestore
-const generateFallbackUsers = (count: number): PlatformUser[] => {
-  const names = [
-    'ProGamer_Alex', 'Sarah_FPS', 'Mike_Legend', 'Luna_Gaming', 'Zex_Master',
-    'Nina_Clutch', 'Tom_Noob', 'Eva_Pro', 'Max_Beast', 'Lily_Gamer'
-  ];
-  
-  const games = ['Valorant', 'League of Legends', 'CS2', 'FIFA', 'Fortnite', 'Rocket League'];
-  const times = ['9h-12h', '12h-15h', '15h-18h', '18h-21h', '21h-00h', 'Week-end'];
-  
-  return Array.from({ length: count }, (_, index) => ({
-    id: `fallback_${Date.now()}_${index}`,
-    name: names[index % names.length],
-    avatar: getRandomGamingAvatar(),
-    age: 18 + Math.floor(Math.random() * 12),
-    games: games.slice(0, 1 + Math.floor(Math.random() * 3)),
-    availability: times.slice(0, 1 + Math.floor(Math.random() * 2)),
-    bio: 'Utilisateur de la plateforme NextMate ! 🎮',
-    distance: Math.floor(Math.random() * 50) + 1,
-    isOnline: Math.random() > 0.3,
-    matchPercentage: 60 + Math.floor(Math.random() * 40),
-    profileComplete: true,
-  }));
-};
+      const userRef = doc(db, 'users', uid);
+      await updateDoc(userRef, {
+        [`stats.${Object.keys(statsUpdate)[0]}`]: Object.values(statsUpdate)[0],
+        'stats.lastActive': new Date(),
+        updatedAt: new Date(),
+      });
 
-// 🔍 Rechercher des utilisateurs par nom ou jeu
-export const searchUsers = async (searchTerm: string, currentUserId: string): Promise<PlatformUser[]> => {
-  try {
-    console.log('🔍 Recherche utilisateurs:', searchTerm);
-    
-    // Pour l'instant, on récupère tous les utilisateurs et on filtre côté client
-    // En production, utiliser des index de recherche comme Algolia
-    const allUsers = await getDiscoveryUsers(currentUserId, 50);
-    
-    const filteredUsers = allUsers.filter(user =>
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.games.some(game => game.toLowerCase().includes(searchTerm.toLowerCase()))
+      // Invalider le cache
+      cacheManager.invalidateKey('userProfiles', `profile_${uid}`);
+
+      logger.firebase('update', 'user_stats', 'success', { uid, update: Object.keys(statsUpdate) });
+    } catch (error) {
+      logger.error('UserService', 'Erreur mise à jour stats', error);
+      throw new Error('Impossible de mettre à jour les statistiques utilisateur');
+    }
+  }
+
+  // 🎮 Récupérer jeux populaires avec cache
+  static async getPopularGames(): Promise<string[]> {
+    // Utiliser le cache centralisé avec fallback
+    return await cacheManager.getWithFallback(
+      'games',
+      'popular',
+      async () => {
+        const games = await AppConfigService.getGames();
+        return games.filter(game => game.isPopular).map(game => game.id);
+      },
+      [], // Fallback vide
+      {
+        ttl: PERFORMANCE_CONFIG.POPULAR_GAMES_CACHE,
+        version: '1.0'
+      }
     );
-    
-    return filteredUsers.slice(0, 10);
-    
-  } catch (error) {
-    console.error('❌ Erreur recherche utilisateurs:', error);
-    return [];
   }
-};
 
-// 📊 Obtenir les statistiques de la plateforme
-export const getPlatformStats = async (): Promise<{ totalUsers: number; onlineUsers: number }> => {
-  try {
-    const usersQuery = query(collection(db, 'users'));
-    const snapshot = await getDocs(usersQuery);
-    
-    let totalUsers = 0;
-    let onlineUsers = 0;
-    
-    snapshot.docs.forEach(doc => {
-      const data = doc.data();
-      totalUsers++;
-      if (data.isOnline) onlineUsers++;
-    });
-    
-    return { totalUsers, onlineUsers };
-    
-  } catch (error) {
-    console.error('❌ Erreur stats plateforme:', error);
-    return { totalUsers: 0, onlineUsers: 0 };
+  // 🎭 Avatar aléatoire
+  static getRandomGamingAvatar(): string {
+    const avatars = ['🎮', '🕹️', '🎯', '🏆', '⚡', '🔥', '💎', '🌟', '🚀', '⭐'];
+    return avatars[Math.floor(Math.random() * avatars.length)];
   }
-}; 
+
+  // 🧹 Gestion du cache
+  static clearCache(): void {
+    cacheManager.clearAll();
+    this.lastCacheInvalidation = Date.now(); // Tracker l'invalidation
+    logger.info('UserService', 'Cache utilisateurs vidé');
+  }
+
+  static getCacheStats() {
+    return cacheManager.getStats();
+  }
+
+  // 📅 Récupérer le timestamp de la dernière invalidation du cache
+  static getLastCacheInvalidation(): number {
+    return this.lastCacheInvalidation;
+  }
+
+  // 🔄 Invalider spécifiquement le cache discovery
+  static invalidateDiscoveryCache(): void {
+    cacheManager.invalidateCache('discovery');
+    this.lastCacheInvalidation = Date.now();
+    logger.info('UserService', 'Cache découverte invalidé');
+  }
+}
+
+// Export par défaut
+export default UserService; 
