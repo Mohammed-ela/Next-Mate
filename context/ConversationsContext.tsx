@@ -1,37 +1,48 @@
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    onSnapshot,
-    query,
-    serverTimestamp,
-    setDoc,
-    where
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where
 } from 'firebase/firestore';
-import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
+import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
 import { db } from '../config/firebase';
-import ImageService from '../services/imageService';
+import { cleanObjectForFirestore, cleanParticipantData, safeTimestampToDate } from '../utils/firebaseHelpers';
+import logger from '../utils/logger';
+import { clearTimerCategory } from '../utils/timerManager';
 import { useAuth } from './AuthContext';
+import { useUserProfile } from './UserProfileContext';
 
-// 🔒 Types TypeScript pour les conversations
+// Types améliorés avec synchronisation temps réel
 interface Message {
   id: string;
   senderId: string;
   content: string;
   timestamp: Date;
-  type: 'text' | 'game_invite' | 'system';
+  type: 'text' | 'system' | 'game_invite';
+  gameInvite?: {
+    gameId: string;
+    gameName: string;
+    message: string;
+  };
 }
 
 interface Participant {
   id: string;
   name: string;
   avatar: string;
-  isImageAvatar?: boolean; // Indique si l'avatar est une image ou un emoji
+  isImageAvatar: boolean;
+  bio?: string;
   isOnline: boolean;
   currentGame?: string;
+  lastSeen?: Date;
 }
 
 interface Conversation {
@@ -47,232 +58,277 @@ interface Conversation {
 interface ConversationsContextType {
   conversations: Conversation[];
   loading: boolean;
-  error: string | null;
-  createConversation: (participant: Participant, gameInCommon?: string) => Promise<string | null>;
+  createConversation: (participant: Participant) => Promise<string | null>;
   getConversationById: (id: string) => Conversation | null;
-  markAsRead: (conversationId: string) => void;
   deleteConversation: (conversationId: string) => Promise<void>;
-  refreshConversations: () => Promise<void>;
-  syncAvatars: () => Promise<void>;
+  markAsRead: (conversationId: string) => void;
+  sendGameInvite: (conversationId: string, gameId: string, gameName: string) => Promise<void>;
+  refreshParticipantData: (conversationId: string) => Promise<void>;
+  syncAllParticipantData: () => Promise<void>;
 }
 
-// 🏗️ Context avec valeurs par défaut
 const ConversationsContext = createContext<ConversationsContextType>({
   conversations: [],
   loading: true,
-  error: null,
   createConversation: async () => null,
   getConversationById: () => null,
-  markAsRead: () => {},
   deleteConversation: async () => {},
-  refreshConversations: async () => {},
-  syncAvatars: async () => {},
+  markAsRead: () => {},
+  sendGameInvite: async () => {},
+  refreshParticipantData: async () => {},
+  syncAllParticipantData: async () => {},
 });
 
-// 🎣 Hook personnalisé
 export const useConversations = () => {
   const context = useContext(ConversationsContext);
   if (!context) {
-    throw new Error('useConversations doit être utilisé dans un ConversationsProvider');
+    throw new Error('useConversations must be used within ConversationsProvider');
   }
   return context;
 };
 
-// 🔥 Provider principal
 export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { user } = useAuth();
+  const { registerAvatarChangeCallback } = useUserProfile();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const firestoreUnsubscribeRef = useRef<(() => void) | null>(null);
+  
+  // 🛡️ Protection anti-boucle pour la synchronisation
+  const lastSyncTime = useRef<number>(0);
+  const SYNC_DEBOUNCE_MS = 3000; // 3 secondes minimum entre les syncs
 
-  // 🆕 Créer une nouvelle conversation
-  const createConversation = async (participant: Participant, gameInCommon?: string): Promise<string | null> => {
+  // 🆕 Créer une conversation optimisée
+  const createConversation = async (participant: Participant): Promise<string | null> => {
     if (!user) {
-      setError('Utilisateur non connecté');
+      logger.warn('Conversations', 'Tentative création conversation sans utilisateur');
       return null;
     }
 
     try {
-      // Vérifier si une conversation existe déjà avec ce participant
-      const existingConversation = conversations.find(conv => 
-        conv.participants.some(p => p.id === participant.id)
+      logger.info('Conversations', `Création conversation avec ${participant.name}`);
+
+      // Vérifier si conversation existe déjà
+      const existingQuery = query(
+        collection(db, 'conversations'),
+        where('participants', 'array-contains', user.uid)
       );
+      
+      const existingSnapshot = await getDocs(existingQuery);
+      const existingConversation = existingSnapshot.docs.find(doc => {
+        const data = doc.data();
+        return data.participants.includes(participant.id);
+      });
 
       if (existingConversation) {
-        console.log('✅ Conversation existante trouvée:', existingConversation.id);
+        logger.debug('Conversations', `Conversation existante trouvée: ${existingConversation.id}`);
         return existingConversation.id;
       }
 
-      // Créer une nouvelle conversation dans Firestore
+      // Créer nouvelle conversation avec données participant complètes
       const conversationRef = doc(collection(db, 'conversations'));
-      const conversationId = conversationRef.id;
-
       const conversationData = {
-        id: conversationId,
         participants: [user.uid, participant.id],
         participantDetails: {
           [user.uid]: {
             name: user.email?.split('@')[0] || 'Moi',
             avatar: '🎮',
             isImageAvatar: false,
+            bio: '',
             isOnline: true,
           },
-          [participant.id]: {
-            name: participant.name,
-            avatar: participant.avatar,
-            isImageAvatar: participant.isImageAvatar || false,
-            isOnline: participant.isOnline,
-            currentGame: participant.currentGame,
-          },
+          [participant.id]: cleanParticipantData(participant),
         },
-        ...(gameInCommon && { gameInCommon }),
+        gameInCommon: participant.currentGame,
+        unreadCounts: {
+          [user.uid]: 0,
+          [participant.id]: 0,
+        },
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
 
-      await setDoc(conversationRef, conversationData);
+      const cleanedData = cleanObjectForFirestore(conversationData);
+      await setDoc(conversationRef, cleanedData);
 
-      // Créer le message système de bienvenue
-      const systemMessage = {
-        senderId: 'system',
-        content: `Vous êtes maintenant connectés ! ${gameInCommon ? `Vous avez ${gameInCommon} en commun 🎮` : 'Amusez-vous bien !'}`,
-        type: 'system',
-        timestamp: serverTimestamp(),
-      };
+      logger.firebase('create', 'conversations', 'success', { 
+        id: conversationRef.id,
+        participant: participant.name 
+      });
 
-      await addDoc(collection(db, 'conversations', conversationId, 'messages'), systemMessage);
-
-      console.log('✅ Nouvelle conversation créée dans Firestore:', conversationId);
-      return conversationId;
-    } catch (err) {
-      console.error('❌ Erreur création conversation:', err);
-      setError('Erreur lors de la création de la conversation');
+      return conversationRef.id;
+    } catch (error) {
+      logger.error('Conversations', 'Erreur création conversation', error);
       return null;
     }
   };
 
-  // 📖 Récupérer une conversation par ID
-  const getConversationById = (id: string): Conversation | null => {
-    return conversations.find(conv => conv.id === id) || null;
-  };
-
-  // ✅ Marquer comme lu (local seulement pour l'instant)
-  const markAsRead = (conversationId: string) => {
-    setConversations(prev => 
-      prev.map(conv => 
-        conv.id === conversationId 
-          ? { ...conv, unreadCount: 0 }
-          : conv
-      )
-    );
-  };
-
-  // 🗑️ Supprimer une conversation
-  const deleteConversation = async (conversationId: string) => {
-    if (!user) {
-      setError('Utilisateur non connecté');
+  // 🎮 Envoyer invitation de jeu optimisée
+  const sendGameInvite = async (conversationId: string, gameId: string, gameName: string) => {
+    if (!user?.uid) {
+      logger.warn('Conversations', 'Tentative envoi invitation sans utilisateur');
       return;
     }
 
     try {
-      // 1. Supprimer tous les messages de la conversation
+      logger.info('Conversations', `Envoi invitation jeu: ${gameName}`);
+
+      const gameInviteMessage = {
+        senderId: user.uid,
+        content: `🎮 Invitation de jeu: ${gameName}`,
+        type: 'game_invite' as const,
+        gameInvite: {
+          gameId,
+          gameName,
+          message: `Jouons ensemble à ${gameName}!`,
+        },
+        timestamp: serverTimestamp(),
+      };
+
+      await addDoc(
+        collection(db, 'conversations', conversationId, 'messages'),
+        gameInviteMessage
+      );
+
+      // Mise à jour dernière conversation
+      const conversationRef = doc(db, 'conversations', conversationId);
+      await updateDoc(conversationRef, {
+        lastMessage: {
+          senderId: user.uid,
+          content: gameInviteMessage.content,
+          timestamp: serverTimestamp(),
+          type: 'game_invite',
+        },
+        updatedAt: serverTimestamp(),
+      });
+
+      logger.firebase('send', 'game_invite', 'success', { gameId, gameName });
+    } catch (error) {
+      logger.error('Conversations', 'Erreur envoi invitation jeu', error);
+    }
+  };
+
+  // 🔄 Mettre à jour les données des participants (avatars, etc.)
+  const refreshParticipantData = async (conversationId: string) => {
+    if (!user?.uid) return;
+
+    try {
+      logger.debug('Conversations', `🔄 Refresh participant data: ${conversationId}`);
+
+      // Récupérer la conversation actuelle
+      const conversationRef = doc(db, 'conversations', conversationId);
+      const conversationSnap = await getDoc(conversationRef);
+      
+      if (!conversationSnap.exists()) {
+        logger.warn('Conversations', `Conversation non trouvée: ${conversationId}`);
+        return;
+      }
+
+      const conversationData = conversationSnap.data();
+      const otherParticipantId = conversationData.participants.find((id: string) => id !== user.uid);
+      
+      if (!otherParticipantId) {
+        logger.warn('Conversations', 'Autre participant non trouvé');
+        return;
+      }
+
+      // Récupérer les données actuelles de l'utilisateur depuis Firestore
+      const userRef = doc(db, 'users', otherParticipantId);
+      const userSnap = await getDoc(userRef);
+      
+      if (!userSnap.exists()) {
+        logger.warn('Conversations', `Utilisateur non trouvé: ${otherParticipantId}`);
+        return;
+      }
+
+      const userData = userSnap.data();
+      
+      // Créer les nouvelles données participant synchronisées
+      const updatedParticipantData = {
+        name: userData.pseudo || userData.name || 'Joueur',
+        avatar: userData.profilePicture || userData.avatar || '🎮',
+        isImageAvatar: (userData.profilePicture || userData.avatar)?.startsWith('http') || false,
+        bio: userData.bio || '',
+        isOnline: userData.isOnline || false,
+        currentGame: userData.currentlyPlaying || (userData.games && userData.games.length > 0 ? userData.games[0].name : undefined),
+        lastSeen: userData.lastSeen,
+      };
+
+      // Mettre à jour dans Firestore
+      await updateDoc(conversationRef, {
+        [`participantDetails.${otherParticipantId}`]: cleanParticipantData(updatedParticipantData),
+        updatedAt: serverTimestamp(),
+      });
+
+      logger.firebase('update', 'participant_data', 'success', { 
+        conversationId, 
+        participantId: otherParticipantId,
+        newAvatar: updatedParticipantData.avatar 
+      });
+
+    } catch (error) {
+      logger.error('Conversations', 'Erreur refresh participant data', error);
+    }
+  };
+
+  const getConversationById = (id: string): Conversation | null => {
+    return conversations.find(conv => conv.id === id) || null;
+  };
+
+  const markAsRead = (conversationId: string) => {
+    if (!user?.uid) return;
+
+    logger.debug('Conversations', `Marquage lu: ${conversationId}`);
+
+    // Mettre à jour localement
+    setConversations(prev => {
+      const updated = prev.map(conv => 
+        conv.id === conversationId 
+          ? { ...conv, unreadCount: 0 }
+          : conv
+      );
+      return updated;
+    });
+
+    // Mettre à jour dans Firestore
+    const conversationRef = doc(db, 'conversations', conversationId);
+    setDoc(conversationRef, {
+      [`unreadCounts.${user.uid}`]: 0
+    }, { merge: true }).then(() => {
+      logger.firebase('update', 'unread_count', 'success', { conversationId });
+    }).catch(error => {
+      logger.error('Conversations', 'Erreur mise à jour lecture', error);
+    });
+  };
+
+  const deleteConversation = async (conversationId: string) => {
+    if (!user) return;
+
+    try {
+      logger.info('Conversations', `Suppression conversation: ${conversationId}`);
+
+      // Supprimer les messages
       const messagesQuery = query(collection(db, 'conversations', conversationId, 'messages'));
       const messagesSnapshot = await getDocs(messagesQuery);
       
       const deletePromises = messagesSnapshot.docs.map(messageDoc => 
         deleteDoc(doc(db, 'conversations', conversationId, 'messages', messageDoc.id))
       );
-      
       await Promise.all(deletePromises);
-      console.log(`✅ ${messagesSnapshot.docs.length} messages supprimés`);
 
-      // 2. Supprimer la conversation elle-même
+      // Supprimer la conversation
       await deleteDoc(doc(db, 'conversations', conversationId));
-      console.log('✅ Conversation supprimée de Firestore:', conversationId);
-
-      // 3. La suppression locale se fera automatiquement via onSnapshot
-      // Pas besoin de setConversations ici car Firestore va notifier le changement
       
+      logger.firebase('delete', 'conversations', 'success', { 
+        conversationId,
+        messagesDeleted: messagesSnapshot.docs.length 
+      });
     } catch (err) {
-      console.error('❌ Erreur suppression conversation:', err);
-      setError('Erreur lors de la suppression de la conversation');
-      
-      // En cas d'erreur Firestore, on supprime quand même localement
-      setConversations(prev => prev.filter(conv => conv.id !== conversationId));
+      logger.error('Conversations', 'Erreur suppression conversation', err);
     }
   };
 
-  // 🔄 Actualiser les conversations
-  const refreshConversations = async () => {
-    // Les conversations sont automatiquement synchronisées via onSnapshot
-    console.log('🔄 Conversations synchronisées automatiquement');
-  };
-
-  // 🔄 Forcer la synchronisation des avatars (utile après changement de photo)
-  const syncAvatars = async () => {
-    if (!user?.uid) return;
-    
-    console.log('🔄 Synchronisation forcée des avatars...');
-    
-    try {
-      // Récupérer toutes les conversations actuelles
-      const conversationsQuery = query(
-        collection(db, 'conversations'),
-        where('participants', 'array-contains', user.uid)
-      );
-      
-      const snapshot = await getDocs(conversationsQuery);
-      const updatedConversations: Conversation[] = [];
-      
-      for (const docSnap of snapshot.docs) {
-        const data = docSnap.data();
-        const otherParticipantId = data.participants.find((id: string) => id !== user.uid);
-        
-        if (otherParticipantId) {
-          // Récupérer le profil à jour
-          const userProfileDoc = await getDoc(doc(db, 'users', otherParticipantId));
-          if (userProfileDoc.exists()) {
-            const profileData = userProfileDoc.data();
-            const avatarUrl = profileData.profilePicture || profileData.avatar || '🎮';
-            const avatarType = ImageService.detectAvatarType(avatarUrl);
-            
-            const conversation: Conversation = {
-              id: docSnap.id,
-              participants: [{
-                id: otherParticipantId,
-                name: profileData.pseudo || `User_${otherParticipantId.slice(0, 6)}`,
-                avatar: avatarUrl,
-                isImageAvatar: ['cloudinary', 'firebase', 'url', 'local'].includes(avatarType),
-                isOnline: profileData.isOnline || false,
-                currentGame: profileData.currentlyPlaying,
-              }],
-              lastMessage: {
-                id: 'last',
-                senderId: data.lastMessage?.senderId || 'system',
-                content: data.lastMessage?.content || 'Conversation créée',
-                timestamp: data.lastMessage?.timestamp?.toDate() || data.createdAt?.toDate() || new Date(),
-                type: data.lastMessage?.type || 'system',
-              },
-              unreadCount: 0,
-              gameInCommon: data.gameInCommon,
-              createdAt: data.createdAt?.toDate() || new Date(),
-              updatedAt: data.updatedAt?.toDate() || new Date(),
-            };
-            
-            updatedConversations.push(conversation);
-          }
-        }
-      }
-      
-      setConversations(updatedConversations);
-      console.log(`✅ ${updatedConversations.length} avatars synchronisés manuellement`);
-      
-    } catch (error) {
-      console.error('❌ Erreur synchronisation manuelle avatars:', error);
-    }
-  };
-
-  // 👂 Écouter les conversations en temps réel
+  // 📡 Écouter les conversations optimisé
   useEffect(() => {
     if (!user?.uid) {
       setConversations([]);
@@ -280,116 +336,126 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
       return;
     }
 
-    setLoading(true);
-    console.log('🔥 Démarrage écoute conversations Firestore pour:', user.uid);
+    logger.info('Conversations', 'Initialisation listener conversations');
 
-    // Query pour récupérer les conversations où l'utilisateur est participant
     const conversationsQuery = query(
       collection(db, 'conversations'),
       where('participants', 'array-contains', user.uid)
-      // orderBy('updatedAt', 'desc') // Temporairement commenté en attendant l'index
     );
 
-    const unsubscribe = onSnapshot(
+    firestoreUnsubscribeRef.current = onSnapshot(
       conversationsQuery,
-      async (snapshot) => {
-        try {
-          const conversationsData: Conversation[] = [];
+      (snapshot) => {
+        const conversationsData: Conversation[] = [];
 
-          for (const docSnap of snapshot.docs) {
-            const data = docSnap.data();
-            
-            // Récupérer les détails du participant (pas moi)
-            const otherParticipantId = data.participants.find((id: string) => id !== user.uid);
-            let participantDetails = data.participantDetails?.[otherParticipantId];
+        snapshot.docs.forEach(docSnap => {
+          const data = docSnap.data();
+          const otherParticipantId = data.participants.find((id: string) => id !== user.uid);
+          const participantDetails = data.participantDetails?.[otherParticipantId];
+          
+          const unreadCount = data.unreadCounts?.[user.uid] || 0;
 
-            // 🔄 SYNCHRONISATION AVATAR : Récupérer les infos à jour du profil utilisateur
-            if (otherParticipantId) {
-              try {
-                const userProfileDoc = await getDoc(doc(db, 'users', otherParticipantId));
-                if (userProfileDoc.exists()) {
-                  const profileData = userProfileDoc.data();
-                  
-                  // Mettre à jour avec les infos les plus récentes du profil
-                  const avatarUrl = profileData.profilePicture || profileData.avatar || '🎮';
-                  const avatarType = ImageService.detectAvatarType(avatarUrl);
-                  
-                  participantDetails = {
-                    ...participantDetails,
-                    name: profileData.pseudo || participantDetails?.name || `User_${otherParticipantId.slice(0, 6)}`,
-                    avatar: avatarUrl,
-                    isImageAvatar: ['cloudinary', 'firebase', 'url', 'local'].includes(avatarType),
-                    isOnline: profileData.isOnline || false,
-                    currentGame: profileData.currentlyPlaying || participantDetails?.currentGame,
-                  };
-                  
-                  console.log('🔄 Avatar synchronisé pour:', participantDetails.name, '→', avatarUrl);
-                }
-              } catch (profileError) {
-                console.warn('⚠️ Erreur sync profil participant:', profileError);
-                // Continuer avec les données existantes si erreur
-              }
-            }
+          if (participantDetails) {
+            const conversation: Conversation = {
+              id: docSnap.id,
+              participants: [{
+                id: otherParticipantId,
+                name: participantDetails.name,
+                avatar: participantDetails.avatar,
+                isImageAvatar: participantDetails.isImageAvatar || false,
+                bio: participantDetails.bio,
+                isOnline: participantDetails.isOnline || false,
+                currentGame: participantDetails.currentGame,
+                lastSeen: participantDetails.lastSeen?.toDate(),
+              }],
+              lastMessage: {
+                id: 'last',
+                senderId: data.lastMessage?.senderId || 'system',
+                content: data.lastMessage?.content || 'Conversation créée',
+                timestamp: safeTimestampToDate(data.lastMessage?.timestamp || data.createdAt),
+                type: data.lastMessage?.type || 'system',
+              },
+              unreadCount,
+              gameInCommon: data.gameInCommon,
+              createdAt: safeTimestampToDate(data.createdAt),
+              updatedAt: safeTimestampToDate(data.updatedAt),
+            };
 
-            if (participantDetails) {
-              const conversation: Conversation = {
-                id: docSnap.id,
-                participants: [{
-                  id: otherParticipantId,
-                  name: participantDetails.name,
-                  avatar: participantDetails.avatar,
-                  isImageAvatar: participantDetails.isImageAvatar,
-                  isOnline: participantDetails.isOnline || false,
-                  currentGame: participantDetails.currentGame,
-                }],
-                lastMessage: {
-                  id: 'last',
-                  senderId: data.lastMessage?.senderId || 'system',
-                  content: data.lastMessage?.content || 'Conversation créée',
-                  timestamp: data.lastMessage?.timestamp?.toDate() || data.createdAt?.toDate() || new Date(),
-                  type: data.lastMessage?.type || 'system',
-                },
-                unreadCount: 0, // TODO: Calculer les messages non lus
-                gameInCommon: data.gameInCommon,
-                createdAt: data.createdAt?.toDate() || new Date(),
-                updatedAt: data.updatedAt?.toDate() || new Date(),
-              };
-
-              conversationsData.push(conversation);
-            }
+            conversationsData.push(conversation);
           }
+        });
 
-          setConversations(conversationsData);
-          setError(null);
-          console.log(`✅ ${conversationsData.length} conversations synchronisées avec avatars à jour`);
-        } catch (err) {
-          console.error('❌ Erreur traitement conversations:', err);
-          setError('Erreur lors de la synchronisation');
-        } finally {
-          setLoading(false);
-        }
+        setConversations(conversationsData);
+        setLoading(false);
+        
+        logger.firebase('sync', 'conversations', 'success', { 
+          count: conversationsData.length 
+        });
       },
       (err) => {
-        console.error('❌ Erreur écoute conversations:', err);
-        setError('Erreur de connexion Firestore');
+        logger.error('Conversations', 'Erreur écoute conversations', err);
         setLoading(false);
       }
     );
 
-    return unsubscribe;
+    return () => {
+      if (firestoreUnsubscribeRef.current) {
+        firestoreUnsubscribeRef.current();
+        firestoreUnsubscribeRef.current = null;
+      }
+      clearTimerCategory('conversations');
+      logger.debug('Conversations', 'Nettoyage listeners et timers');
+    };
   }, [user?.uid]);
 
-  // 📦 Valeurs du contexte
+  // 🔄 Fonction pour synchroniser tous les avatars des conversations (avec protection)
+  const syncAllParticipantData = async () => {
+    const now = Date.now();
+    
+    // 🛡️ Vérifier le délai minimum depuis la dernière sync
+    if (now - lastSyncTime.current < SYNC_DEBOUNCE_MS) {
+      logger.debug('Conversations', '⏳ Synchronisation ignorée (trop récente)');
+      return;
+    }
+    
+    if (!user?.uid || conversations.length === 0) return;
+
+    try {
+      lastSyncTime.current = now;
+      logger.info('Conversations', '🔄 Synchronisation avatars de toutes les conversations');
+      
+      // Synchroniser en parallèle pour optimiser
+      const syncPromises = conversations.map(conversation => 
+        refreshParticipantData(conversation.id)
+      );
+      
+      await Promise.all(syncPromises);
+      logger.info('Conversations', '✅ Synchronisation avatars terminée');
+    } catch (error) {
+      logger.error('Conversations', 'Erreur synchronisation avatars', error);
+    }
+  };
+
+  // 👂 S'enregistrer pour écouter les changements d'avatar
+  useEffect(() => {
+    const unregister = registerAvatarChangeCallback(() => {
+      logger.info('Conversations', '🔄 Avatar changé détecté, synchronisation...');
+      syncAllParticipantData();
+    });
+
+    return unregister;
+  }, [registerAvatarChangeCallback, syncAllParticipantData]);
+
   const value: ConversationsContextType = {
     conversations,
     loading,
-    error,
     createConversation,
     getConversationById,
-    markAsRead,
     deleteConversation,
-    refreshConversations,
-    syncAvatars,
+    markAsRead,
+    sendGameInvite,
+    refreshParticipantData,
+    syncAllParticipantData,
   };
 
   return (

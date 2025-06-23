@@ -1,5 +1,5 @@
 import { doc, getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { db } from '../config/firebase';
 import { useAuth } from './AuthContext';
 
@@ -111,6 +111,7 @@ interface UserProfileContextType {
   removeGame: (gameId: string) => Promise<boolean>;
   updateAvailability: (availability: AvailabilitySlot[]) => Promise<boolean>;
   refreshProfile: () => Promise<void>;
+  registerAvatarChangeCallback: (callback: () => void) => () => void;
 }
 
 const UserProfileContext = createContext<UserProfileContextType>({
@@ -122,6 +123,7 @@ const UserProfileContext = createContext<UserProfileContextType>({
   removeGame: async () => false,
   updateAvailability: async () => false,
   refreshProfile: async () => {},
+  registerAvatarChangeCallback: () => () => {},
 });
 
 export const useUserProfile = () => {
@@ -137,6 +139,27 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // 🔄 Callbacks pour notifier les changements d'avatar
+  const avatarChangeCallbacks = useRef<Set<() => void>>(new Set());
+
+  const notifyAvatarChange = () => {
+    // Appeler tous les callbacks enregistrés après un délai
+    setTimeout(() => {
+      avatarChangeCallbacks.current.forEach(callback => {
+        try {
+          callback();
+        } catch (error) {
+          console.error('Erreur callback avatar change:', error);
+        }
+      });
+    }, 1000);
+  };
+
+  const registerAvatarChangeCallback = (callback: () => void) => {
+    avatarChangeCallbacks.current.add(callback);
+    return () => avatarChangeCallbacks.current.delete(callback);
+  };
 
   // 📖 Écouter les changements du profil en temps réel
   useEffect(() => {
@@ -183,7 +206,10 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
           });
           setError(null);
         } else {
-          createDefaultProfile();
+          // Ne pas recréer automatiquement le profil
+          // Il sera créé seulement lors de l'inscription ou manuellement
+          console.log('👤 Aucun profil trouvé pour cet utilisateur');
+          setProfile(null);
         }
         setLoading(false);
       },
@@ -243,6 +269,13 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
       });
 
       console.log('✅ Profil mis à jour:', Object.keys(updates));
+
+      // 🔄 Si l'avatar a changé, déclencher la synchronisation des conversations
+      if (updates.profilePicture !== undefined) {
+        console.log('🔄 Avatar changé, notification des conversations...');
+        notifyAvatarChange();
+      }
+
       return true;
     } catch (err) {
       console.error('❌ Erreur mise à jour profil:', err);
@@ -348,6 +381,7 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
     removeGame,
     updateAvailability,
     refreshProfile,
+    registerAvatarChangeCallback,
   };
 
   return (

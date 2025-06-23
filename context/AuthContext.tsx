@@ -1,13 +1,24 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-    AuthError,
-    createUserWithEmailAndPassword,
-    onAuthStateChanged,
-    signInWithEmailAndPassword,
-    signOut,
-    User
+  AuthError,
+  createUserWithEmailAndPassword,
+  deleteUser,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+  User
 } from 'firebase/auth';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
+  setDoc,
+  where
+} from 'firebase/firestore';
 import React, { createContext, ReactNode, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../config/firebase';
 
@@ -21,6 +32,7 @@ interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<AuthResult>;
   register: (email: string, password: string, pseudo?: string) => Promise<AuthResult>;
   logout: () => Promise<void>;
+  deleteAccount: () => Promise<DeleteAccountResult>;
   clearError: () => void;
   error: string | null;
 }
@@ -28,6 +40,11 @@ interface AuthContextType extends AuthState {
 interface AuthResult {
   success: boolean;
   user?: User;
+  error?: string;
+}
+
+interface DeleteAccountResult {
+  success: boolean;
   error?: string;
 }
 
@@ -47,6 +64,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => ({ success: false }),
   register: async () => ({ success: false }),
   logout: async () => {},
+  deleteAccount: async () => ({ success: false }),
   clearError: () => {},
   error: null,
 });
@@ -168,6 +186,98 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
+  // 🗑️ Suppression complète du compte
+  const deleteAccount = async (): Promise<DeleteAccountResult> => {
+    if (!user) {
+      return { success: false, error: 'Aucun utilisateur connecté' };
+    }
+
+    setError(null);
+    setLoading(true);
+
+    try {
+      const userId = user.uid;
+      console.log('🗑️ Début suppression compte pour:', user.email);
+
+      // 1. Supprimer toutes les conversations de l'utilisateur
+      console.log('🗑️ Étape 1: Suppression des conversations...');
+      const conversationsQuery = query(
+        collection(db, 'conversations'),
+        where('participants', 'array-contains', userId)
+      );
+      
+      const conversationsSnapshot = await getDocs(conversationsQuery);
+      console.log(`🗑️ ${conversationsSnapshot.docs.length} conversations à supprimer`);
+
+      // Supprimer chaque conversation et ses messages
+      for (const conversationDoc of conversationsSnapshot.docs) {
+        const conversationId = conversationDoc.id;
+        
+        // Supprimer tous les messages de la conversation
+        const messagesQuery = query(collection(db, 'conversations', conversationId, 'messages'));
+        const messagesSnapshot = await getDocs(messagesQuery);
+        
+        const deleteMessagePromises = messagesSnapshot.docs.map(messageDoc => 
+          deleteDoc(doc(db, 'conversations', conversationId, 'messages', messageDoc.id))
+        );
+        await Promise.all(deleteMessagePromises);
+        
+        // Supprimer la conversation elle-même
+        await deleteDoc(doc(db, 'conversations', conversationId));
+        console.log(`✅ Conversation ${conversationId} supprimée`);
+      }
+
+      // 2. Supprimer le profil utilisateur dans Firestore
+      console.log('🗑️ Étape 2: Suppression du profil Firestore...');
+      const userDocRef = doc(db, 'users', userId);
+      
+      // Vérifier que le document existe avant de le supprimer
+      const userDocSnap = await getDoc(userDocRef);
+      if (userDocSnap.exists()) {
+        await deleteDoc(userDocRef);
+        console.log('✅ Profil utilisateur supprimé de Firestore');
+        
+        // Vérifier que la suppression a bien fonctionné
+        const verifyDocSnap = await getDoc(userDocRef);
+        if (verifyDocSnap.exists()) {
+          throw new Error('La suppression du profil Firestore a échoué');
+        }
+        console.log('✅ Suppression Firestore vérifiée');
+      } else {
+        console.log('⚠️ Profil utilisateur déjà absent de Firestore');
+      }
+
+      // 3. Supprimer le compte Firebase Auth
+      console.log('🗑️ Étape 3: Suppression du compte Firebase Auth...');
+      await deleteUser(user);
+      console.log('✅ Compte Firebase Auth supprimé');
+
+      // 4. Nettoyer AsyncStorage
+      console.log('🗑️ Étape 4: Nettoyage AsyncStorage...');
+      await AsyncStorage.removeItem(STORAGE_KEY);
+      console.log('✅ AsyncStorage nettoyé');
+
+      console.log('🎉 Compte complètement supprimé avec succès');
+      return { success: true };
+
+    } catch (err) {
+      const error = err as any;
+      let errorMessage = 'Une erreur est survenue lors de la suppression';
+      
+      if (error.code) {
+        errorMessage = getErrorMessage(error.code);
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setError(errorMessage);
+      console.error('❌ Erreur suppression compte:', error);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // 🧹 Effacer erreurs
   const clearError = () => setError(null);
 
@@ -194,6 +304,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     login,
     register,
     logout,
+    deleteAccount,
     clearError,
     error,
   };
@@ -205,11 +316,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
 };
 
-// 🔧 Utilitaire : Messages d'erreur Firebase en français
+// 🚨 Messages d'erreur Firebase en français
 const getErrorMessage = (errorCode: string): string => {
   switch (errorCode) {
     case 'auth/user-not-found':
-      return 'Aucun utilisateur trouvé avec cet email';
+      return 'Aucun compte trouvé avec cette adresse email';
     case 'auth/wrong-password':
       return 'Mot de passe incorrect';
     case 'auth/email-already-in-use':
@@ -218,10 +329,14 @@ const getErrorMessage = (errorCode: string): string => {
       return 'Le mot de passe doit contenir au moins 6 caractères';
     case 'auth/invalid-email':
       return 'Adresse email invalide';
+    case 'auth/user-disabled':
+      return 'Ce compte a été désactivé';
     case 'auth/too-many-requests':
       return 'Trop de tentatives. Réessayez plus tard';
     case 'auth/network-request-failed':
-      return 'Erreur de connexion réseau';
+      return 'Erreur de connexion. Vérifiez votre internet';
+    case 'auth/requires-recent-login':
+      return 'Cette action nécessite une reconnexion récente';
     default:
       return 'Une erreur est survenue. Réessayez plus tard';
   }
