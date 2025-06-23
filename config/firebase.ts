@@ -22,7 +22,7 @@ if (getApps().length === 0) {
   app = getApps()[0];
 }
 
-// 🔐 Auth (simple pour Expo Managed)
+// 🔐 Auth (simple et fonctionnel)
 export const auth = getAuth(app);
 
 // 🗄️ Firestore avec persistance offline
@@ -32,7 +32,7 @@ export const db = getFirestore(app);
 export const storage = getStorage(app);
 
 // 🛠️ Développement : connection aux émulateurs (optionnel)
-if (__DEV__) {
+if (typeof __DEV__ !== 'undefined' && __DEV__) {
   // Décommente si tu utilises l'émulateur Firebase
   // connectAuthEmulator(auth, 'http://localhost:9099');
   // connectFirestoreEmulator(db, 'localhost', 8080);
