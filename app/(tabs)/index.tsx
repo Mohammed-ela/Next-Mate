@@ -17,42 +17,19 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+import { useAppConfig } from '../../context/AppConfigContext';
 import { useAuth } from '../../context/AuthContext';
-import { useConversations } from '../../context/ConversationsContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useUserProfile } from '../../context/UserProfileContext';
+import type { Game } from '../../services/appConfigService';
 import ImageService from '../../services/imageService';
-
-const POPULAR_GAMES = [
-  { id: '1', name: 'Valorant', icon: '🎯', platform: 'PC' },
-  { id: '2', name: 'League of Legends', icon: '⚔️', platform: 'PC' },
-  { id: '3', name: 'FIFA 24', icon: '⚽', platform: 'PS5' },
-  { id: '4', name: 'Apex Legends', icon: '🔫', platform: 'PC' },
-  { id: '5', name: 'Fortnite', icon: '🏗️', platform: 'PC' },
-  { id: '6', name: 'CS2', icon: '💥', platform: 'PC' },
-];
-
-const TIME_SLOTS = [
-  '9h-12h', '12h-15h', '15h-18h', '18h-21h', '21h-24h', '24h-3h'
-];
-
-const RANKS = {
-  'Valorant': ['Fer', 'Bronze', 'Argent', 'Or', 'Platine', 'Diamant', 'Ascendant', 'Immortel', 'Radiant'],
-  'League of Legends': ['Fer', 'Bronze', 'Argent', 'Or', 'Platine', 'Diamant', 'Maître', 'Grandmaître', 'Challenger'],
-  'CS2': ['Argent', 'Or Nova', 'Maître Guardian', 'Aigle', 'Suprême', 'Global Elite'],
-  'FIFA 24': ['Div 10', 'Div 9', 'Div 8', 'Div 7', 'Div 6', 'Div 5', 'Div 4', 'Div 3', 'Div 2', 'Div 1', 'Elite'],
-  'Apex Legends': ['Bronze', 'Argent', 'Or', 'Platine', 'Diamant', 'Maître', 'Prédateur'],
-  'Fortnite': ['Bronze', 'Argent', 'Or', 'Platine', 'Diamant', 'Elite', 'Champion', 'Non Classé'],
-  'Default': ['Débutant', 'Novice', 'Intermédiaire', 'Avancé', 'Expert']
-};
-
-const GAME_STYLES = ['Chill', 'Tryhard', 'Competitive', 'Fun', 'Improve'];
 
 export default function HomeScreen() {
   const { logout, user } = useAuth();
   const { profile, updateProfile, loading } = useUserProfile();
   const { colors, isDarkMode } = useTheme();
-  const { syncAvatars } = useConversations();
+  // const { syncAvatars } = useConversations(); // Fonction supprimée dans l'optimisation
+  const { games, timeSlots, gameRanks, gameStyles, loading: configLoading } = useAppConfig();
   
   // États existants
   const [isGameModalVisible, setIsGameModalVisible] = useState(false);
@@ -61,9 +38,9 @@ export default function HomeScreen() {
 
   // Nouveaux états pour l'édition des jeux
   const [isEditGameModalVisible, setIsEditGameModalVisible] = useState(false);
-  const [selectedGame, setSelectedGame] = useState(null);
+  const [selectedGame, setSelectedGame] = useState<Game | null>(null);
   const [selectedRank, setSelectedRank] = useState('');
-  const [selectedStyle, setSelectedStyle] = useState([]);
+  const [selectedStyle, setSelectedStyle] = useState<string[]>([]);
 
   // Nouveaux états pour bio et avatar
   const [isEditingBio, setIsEditingBio] = useState(false);
@@ -196,13 +173,13 @@ export default function HomeScreen() {
             console.log(`✅ Avatar mis à jour en mode local (${newChangesCount}/2 aujourd'hui)`);
             // Le toast est déjà géré par ImageService, pas besoin d'Alert ici
             
-            // 🔄 Synchroniser les avatars dans les conversations
-            try {
-              await syncAvatars();
-              console.log('🔄 Conversations synchronisées après changement d\'avatar');
-            } catch (syncError) {
-              console.warn('⚠️ Erreur synchronisation conversations:', syncError);
-            }
+            // 🔄 Synchronisation des avatars supprimée dans l'optimisation
+            // try {
+            //   await syncAvatars();
+            //   console.log('🔄 Conversations synchronisées après changement d\'avatar');
+            // } catch (syncError) {
+            //   console.warn('⚠️ Erreur synchronisation conversations:', syncError);
+            // }
           }
         } else {
           Alert.alert(
@@ -287,15 +264,25 @@ export default function HomeScreen() {
     }
   };
 
-  const toggleAvailability = async (timeSlot: string) => {
+  const toggleAvailability = async (timeSlot: any) => {
     if (!profile) return;
     
-    let updatedAvailability;
-    if (profile.availability.includes(timeSlot)) {
-      updatedAvailability = profile.availability.filter(t => t !== timeSlot);
-    } else {
-      updatedAvailability = [...profile.availability, timeSlot];
-    }
+    // TimeSlot est un objet avec { id, label, startTime, endTime, isPopular }
+    const timeSlotLabel = timeSlot.label;
+    const currentAvailability = profile.availability || [];
+    
+    // Vérifier si le créneau est déjà sélectionné
+    const isSelected = currentAvailability.some((slot: any) => 
+      (typeof slot === 'string' ? slot : slot.label || slot) === timeSlotLabel
+    );
+    
+    const updatedAvailability = isSelected
+      ? currentAvailability.filter((slot: any) => 
+          (typeof slot === 'string' ? slot : slot.label || slot) !== timeSlotLabel
+        )
+      : [...currentAvailability, timeSlotLabel];
+    
+    console.log('🕐 Toggle disponibilité:', { timeSlotLabel, isSelected, updatedAvailability });
     await updateProfile({ availability: updatedAvailability });
   };
 
@@ -398,8 +385,17 @@ export default function HomeScreen() {
   // Afficher un loader si le profil charge
   if (loading) {
     return (
+      <View style={[styles.container, { backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: colors.text, fontSize: 16 }}>Chargement du profil...</Text>
+      </View>
+    );
+  }
+
+  // Si la configuration est en cours de chargement, afficher un loader
+  if (configLoading) {
+    return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ color: '#FFFFFF', fontSize: 16 }}>Chargement du profil...</Text>
+        <Text style={[styles.loadingText, { color: colors.text }]}>Chargement de la configuration...</Text>
       </View>
     );
   }
@@ -562,18 +558,21 @@ export default function HomeScreen() {
                 {isEditingBio ? (
                   <View style={styles.bioEditContainer}>
                     <TextInput
-                      style={styles.bioInput}
+                      style={[styles.bioInput, {
+                        color: colors.text,
+                        backgroundColor: colors.surface
+                      }]}
                       value={bioText}
                       onChangeText={setBioText}
                       placeholder="Raconte-toi ! Quel type de gamer es-tu ? 🎮"
-                      placeholderTextColor="#FFFFFF60"
+                      placeholderTextColor={colors.textSecondary}
                       multiline
                       numberOfLines={4}
                       maxLength={200}
                       autoFocus
                     />
                     <View style={styles.bioActions}>
-                      <Text style={styles.charCount}>{bioText.length}/200</Text>
+                      <Text style={[styles.charCount, { color: colors.textSecondary }]}>{bioText.length}/200</Text>
                       <TouchableOpacity 
                         style={styles.saveBioButton}
                         onPress={handleSaveBio}
@@ -588,11 +587,18 @@ export default function HomeScreen() {
                     onPress={() => setIsEditingBio(true)}
                   >
                     {profile.bio ? (
-                      <Text style={styles.bioText}>
+                      <Text style={[styles.bioText, { 
+                        color: colors.text,
+                        backgroundColor: colors.surface 
+                      }]}>
                         "{profile.bio}"
                       </Text>
                     ) : (
-                      <Text style={styles.bioPlaceholder}>
+                      <Text style={[styles.bioPlaceholder, { 
+                        color: colors.textSecondary,
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border 
+                      }]}>
                         Raconte-toi ! Quel type de gamer es-tu ? 🎮
                         {'\n'}Appuie ici pour ajouter une biographie
                       </Text>
@@ -661,11 +667,11 @@ export default function HomeScreen() {
               
               {profile?.games.length === 0 && (
                 <TouchableOpacity 
-                  style={styles.emptyGameCard}
+                  style={[styles.emptyGameCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
                   onPress={() => setIsGameModalVisible(true)}
                 >
-                  <Ionicons name="add" size={24} color="#FFFFFF80" />
-                  <Text style={styles.emptyText}>Ajouter un jeu</Text>
+                  <Ionicons name="add" size={24} color={colors.textSecondary} />
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>Ajouter un jeu</Text>
                 </TouchableOpacity>
               )}
             </View>
@@ -676,23 +682,39 @@ export default function HomeScreen() {
             <Text style={[styles.sectionTitle, { color: colors.text }]}>⏰ Disponibilité</Text>
             <View style={{ marginBottom: 10 }} />
             <View style={styles.timeSlots}>
-              {TIME_SLOTS.map((timeSlot) => (
-                <TouchableOpacity
-                  key={timeSlot}
-                  style={[
-                    styles.timeSlot,
-                    profile?.availability.includes(timeSlot) && styles.timeSlotActive
-                  ]}
-                  onPress={() => toggleAvailability(timeSlot)}
-                >
-                  <Text style={[
-                    styles.timeSlotText,
-                    profile?.availability.includes(timeSlot) && styles.timeSlotTextActive
-                  ]}>
-                    {timeSlot}
+              {timeSlots && timeSlots.length > 0 ? timeSlots.map((timeSlot, index) => {
+                // TimeSlot est un objet avec { id, label, startTime, endTime, isPopular }
+                const timeSlotLabel = timeSlot.label;
+                const timeSlotKey = timeSlot.id || `slot-${index}`;
+                
+                return (
+                  <TouchableOpacity
+                    key={timeSlotKey}
+                    style={[
+                      styles.timeSlot,
+                      profile?.availability?.some((slot: any) => 
+                        (typeof slot === 'string' ? slot : slot.label || slot) === timeSlotLabel
+                      ) && styles.timeSlotActive
+                    ]}
+                    onPress={() => toggleAvailability(timeSlot)}
+                  >
+                    <Text style={[
+                      styles.timeSlotText,
+                      profile?.availability?.some((slot: any) => 
+                        (typeof slot === 'string' ? slot : slot.label || slot) === timeSlotLabel
+                      ) && styles.timeSlotTextActive
+                    ]}>
+                      {timeSlotLabel}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }) : (
+                <View style={[styles.emptyGameCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                    {configLoading ? 'Chargement des créneaux...' : 'Aucun créneau disponible'}
                   </Text>
-                </TouchableOpacity>
-              ))}
+                </View>
+              )}
             </View>
           </View>
         </ScrollView>
@@ -704,29 +726,29 @@ export default function HomeScreen() {
           transparent={true}
         >
           <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Ajouter un jeu</Text>
+            <View style={[styles.modalContent, { backgroundColor: colors.card }]}>
+              <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.modalTitle, { color: colors.text }]}>Ajouter un jeu</Text>
                 <TouchableOpacity 
                   onPress={() => setIsGameModalVisible(false)}
                   style={styles.closeButton}
                 >
-                  <Ionicons name="close" size={24} color="#FFFFFF80" />
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
               
               <FlatList
-                data={POPULAR_GAMES.filter(game => !profile?.games.find(g => g.id === game.id))}
+                data={games.filter(game => !profile?.games.find(g => g.id === game.id))}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
                   <TouchableOpacity 
-                    style={styles.modalGameItem}
+                    style={[styles.modalGameItem, { borderBottomColor: colors.border }]}
                     onPress={() => addGame(item)}
                   >
                     <Text style={styles.gameIcon}>{item.icon}</Text>
                     <View style={styles.modalGameInfo}>
-                      <Text style={styles.modalGameName}>{item.name}</Text>
-                      <Text style={styles.modalGamePlatform}>{item.platform}</Text>
+                      <Text style={[styles.modalGameName, { color: colors.text }]}>{item.name}</Text>
+                      <Text style={[styles.modalGamePlatform, { color: colors.textSecondary }]}>{item.category}</Text>
                     </View>
                     <Ionicons name="add" size={20} color="#FF8E53" />
                   </TouchableOpacity>
@@ -743,10 +765,10 @@ export default function HomeScreen() {
           transparent={true}
         >
           <View style={styles.simpleModalOverlay}>
-            <View style={styles.simpleModalContent}>
+            <View style={[styles.simpleModalContent, { backgroundColor: colors.card }]}>
               {/* Header */}
-              <View style={styles.simpleModalHeader}>
-                <Text style={styles.simpleModalTitle}>
+              <View style={[styles.simpleModalHeader, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.simpleModalTitle, { color: colors.text }]}>
                   🎮 {selectedGame?.name}
                 </Text>
                 <TouchableOpacity 
@@ -761,15 +783,15 @@ export default function HomeScreen() {
               <View style={styles.simpleModalBody}>
                 {/* Mon Rang */}
                 <View style={styles.simpleSection}>
-                  <Text style={styles.simpleSectionTitle}>🏆 Mon Rang</Text>
-                  <Text style={styles.simpleSectionSubtitle}>Sélectionne ton niveau actuel</Text>
+                  <Text style={[styles.simpleSectionTitle, { color: colors.text }]}>🏆 Mon Rang</Text>
+                  <Text style={[styles.simpleSectionSubtitle, { color: colors.textSecondary }]}>Sélectionne ton niveau actuel</Text>
                   
                   <ScrollView 
                     horizontal 
                     showsHorizontalScrollIndicator={false}
                     style={styles.simpleRankScroll}
                   >
-                    {(RANKS[selectedGame?.name] || RANKS.Default).map((rank) => (
+                    {(gameRanks[selectedGame?.id || ''] || []).map((rank: any) => (
                       <TouchableOpacity
                         key={rank}
                         style={[
@@ -780,6 +802,7 @@ export default function HomeScreen() {
                       >
                         <Text style={[
                           styles.simpleRankText,
+                          { color: selectedRank === rank ? '#FFFFFF' : colors.textSecondary },
                           selectedRank === rank && styles.simpleRankTextSelected
                         ]}>
                           {rank}
@@ -791,27 +814,28 @@ export default function HomeScreen() {
 
                 {/* Mon Style */}
                 <View style={styles.simpleSection}>
-                  <Text style={styles.simpleSectionTitle}>🎯 Mon Style</Text>
-                  <Text style={styles.simpleSectionSubtitle}>Comment tu aimes jouer ? (plusieurs choix possible)</Text>
+                  <Text style={[styles.simpleSectionTitle, { color: colors.text }]}>🎯 Mon Style</Text>
+                  <Text style={[styles.simpleSectionSubtitle, { color: colors.textSecondary }]}>Comment tu aimes jouer ? (plusieurs choix possible)</Text>
                   
                   <View style={styles.simpleStyleGrid}>
-                    {GAME_STYLES.map((style) => (
-                      <TouchableOpacity
-                        key={style}
-                        style={[
-                          styles.simpleStyleButton,
-                          selectedStyle.includes(style) && styles.simpleStyleButtonSelected
-                        ]}
-                        onPress={() => toggleStyle(style)}
-                      >
-                        <Text style={[
-                          styles.simpleStyleText,
-                          selectedStyle.includes(style) && styles.simpleStyleTextSelected
-                        ]}>
-                          {style}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                                          {gameStyles.map((style) => (
+                        <TouchableOpacity
+                          key={style.id}
+                          style={[
+                            styles.simpleStyleButton,
+                            selectedStyle.includes(style.name) && styles.simpleStyleButtonSelected
+                          ]}
+                          onPress={() => toggleStyle(style.name)}
+                        >
+                          <Text style={[
+                            styles.simpleStyleText,
+                            { color: selectedStyle.includes(style.name) ? '#FFFFFF' : colors.textSecondary },
+                            selectedStyle.includes(style.name) && styles.simpleStyleTextSelected
+                          ]}>
+                            {style.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
                   </View>
                 </View>
 
@@ -835,15 +859,15 @@ export default function HomeScreen() {
           onRequestClose={() => setShowContactSupportModal(false)}
         >
           <View style={styles.supportModalOverlay}>
-            <View style={styles.supportModalContent}>
+            <View style={[styles.supportModalContent, { backgroundColor: colors.card, borderColor: colors.secondary }]}>
               {/* Header */}
-              <View style={styles.supportModalHeader}>
-                <Text style={styles.supportModalTitle}>🔒 Modification impossible</Text>
+              <View style={[styles.supportModalHeader, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.supportModalTitle, { color: colors.text }]}>🔒 Modification impossible</Text>
                 <TouchableOpacity 
                   style={styles.supportCloseButton}
                   onPress={() => setShowContactSupportModal(false)}
                 >
-                  <Ionicons name="close" size={24} color="#FFFFFF80" />
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
@@ -853,20 +877,20 @@ export default function HomeScreen() {
                   <Ionicons name="shield-checkmark" size={48} color="#FF8E53" />
                 </View>
                 
-                <Text style={styles.supportMainText}>
+                <Text style={[styles.supportMainText, { color: colors.text }]}>
                   Pour des raisons de sécurité, votre date de naissance ne peut pas être modifiée directement.
                 </Text>
                 
-                <Text style={styles.supportSubText}>
+                <Text style={[styles.supportSubText, { color: colors.textSecondary }]}>
                   Notre équipe support est là pour vous aider si vous avez fait une erreur ou si votre situation a changé.
                 </Text>
 
                 <View style={styles.supportButtonsContainer}>
                   <TouchableOpacity 
-                    style={styles.supportCancelButton}
+                    style={[styles.supportCancelButton, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={() => setShowContactSupportModal(false)}
                   >
-                    <Text style={styles.supportCancelButtonText}>Annuler</Text>
+                    <Text style={[styles.supportCancelButtonText, { color: colors.textSecondary }]}>Annuler</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
@@ -890,51 +914,51 @@ export default function HomeScreen() {
           onRequestClose={() => setShowGenderModal(false)}
         >
           <View style={styles.genderModalOverlay}>
-            <View style={styles.genderModalContent}>
+            <View style={[styles.genderModalContent, { backgroundColor: colors.card, borderColor: colors.secondary }]}>
               {/* Header */}
-              <View style={styles.genderModalHeader}>
-                <Text style={styles.genderModalTitle}>👤 Mon sexe</Text>
+              <View style={[styles.genderModalHeader, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.genderModalTitle, { color: colors.text }]}>👤 Mon sexe</Text>
                 <TouchableOpacity 
                   style={styles.genderCloseButton}
                   onPress={() => setShowGenderModal(false)}
                 >
-                  <Ionicons name="close" size={24} color="#FFFFFF80" />
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
                 </TouchableOpacity>
               </View>
 
               {/* Body */}
               <View style={styles.genderModalBody}>
-                <Text style={styles.genderMainText}>
+                <Text style={[styles.genderMainText, { color: colors.text }]}>
                   Cette information nous aide à mieux vous mettre en relation avec d'autres gamers.
                 </Text>
                 
-                <Text style={styles.genderSubText}>
+                <Text style={[styles.genderSubText, { color: colors.secondary }]}>
                   ⚠️ Une fois défini, vous devrez contacter le support pour modifier cette information.
                 </Text>
 
                 <View style={styles.genderOptionsContainer}>
                   <TouchableOpacity 
-                    style={styles.genderOption}
+                    style={[styles.genderOption, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={() => handleGenderSelect('Homme')}
                   >
                     <Text style={styles.genderEmoji}>♂️</Text>
-                    <Text style={styles.genderOptionText}>Homme</Text>
+                    <Text style={[styles.genderOptionText, { color: colors.text }]}>Homme</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
-                    style={styles.genderOption}
+                    style={[styles.genderOption, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={() => handleGenderSelect('Femme')}
                   >
                     <Text style={styles.genderEmoji}>♀️</Text>
-                    <Text style={styles.genderOptionText}>Femme</Text>
+                    <Text style={[styles.genderOptionText, { color: colors.text }]}>Femme</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity 
-                    style={styles.genderOption}
+                    style={[styles.genderOption, { backgroundColor: colors.surface, borderColor: colors.border }]}
                     onPress={() => handleGenderSelect('Autre')}
                   >
                     <Text style={styles.genderEmoji}>⚧️</Text>
-                    <Text style={styles.genderOptionText}>Autre</Text>
+                    <Text style={[styles.genderOptionText, { color: colors.text }]}>Autre</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -988,11 +1012,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pseudoInput: {
-    color: '#FFFFFF',
     fontSize: 20,
     fontWeight: 'bold',
     borderBottomWidth: 1,
-    borderBottomColor: '#FFFFFF80',
     paddingVertical: 5,
     minWidth: 150,
   },
@@ -1005,7 +1027,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pseudo: {
-    color: '#FFFFFF',
     fontSize: 20,
     fontWeight: 'bold',
   },
@@ -1027,7 +1048,6 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   sectionTitle: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -1056,28 +1076,23 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   gameName: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
   gameRank: {
-    color: '#FFFFFF80',
     fontSize: 14,
   },
   removeButton: {
     padding: 5,
   },
   emptyGameCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
     borderStyle: 'dashed',
   },
   emptyText: {
-    color: '#FFFFFF80',
     marginTop: 8,
   },
   timeSlots: {
@@ -1098,11 +1113,9 @@ const styles = StyleSheet.create({
     borderColor: '#FF8E53',
   },
   timeSlotText: {
-    color: '#FFFFFF80',
     fontSize: 14,
   },
   timeSlotTextActive: {
-    color: '#FFFFFF',
     fontWeight: '600',
   },
   modalOverlay: {
@@ -1111,7 +1124,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#2F0C4D',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '70%',
@@ -1146,10 +1158,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
   modalTitle: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold',
   },
@@ -1161,19 +1171,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 15,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
   },
   modalGameInfo: {
     flex: 1,
     marginLeft: 12,
   },
   modalGameName: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
   modalGamePlatform: {
-    color: '#FFFFFF80',
     fontSize: 14,
   },
   profileDetailsButton: {
@@ -1203,12 +1210,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statNumber: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
   },
   statLabel: {
-    color: '#FFFFFF80',
     fontSize: 14,
   },
   bioPreview: {
@@ -1340,7 +1345,6 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   simpleModalContent: {
-    backgroundColor: '#2F0C4D', // Violet foncé NextMate
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
     maxHeight: '85%',
@@ -1355,12 +1359,10 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#FFFFFF20',
   },
   simpleModalTitle: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#FFFFFF', // Texte blanc
   },
   simpleCloseButton: {
     padding: 5,
@@ -1375,12 +1377,10 @@ const styles = StyleSheet.create({
   simpleSectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFFFFF', // Texte blanc
     marginBottom: 5,
   },
   simpleSectionSubtitle: {
     fontSize: 14,
-    color: '#FFFFFF80', // Texte blanc semi-transparent
     marginBottom: 15,
   },
   simpleRankScroll: {
@@ -1402,10 +1402,9 @@ const styles = StyleSheet.create({
   simpleRankText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF80', // Texte blanc semi-transparent
   },
   simpleRankTextSelected: {
-    color: '#FFFFFF', // Texte blanc quand sélectionné
+    color: '#FFFFFF', // Gardé car bouton sélectionné orange
   },
   simpleStyleGrid: {
     flexDirection: 'row',
@@ -1429,10 +1428,9 @@ const styles = StyleSheet.create({
   simpleStyleText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF80', // Texte blanc semi-transparent
   },
   simpleStyleTextSelected: {
-    color: '#FFFFFF', // Texte blanc quand sélectionné
+    color: '#FFFFFF', // Gardé car bouton sélectionné violet
   },
   simpleSaveButton: {
     backgroundColor: '#FF8E53', // Orange NextMate pour le bouton principal
@@ -1464,29 +1462,24 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   bioText: {
-    color: '#FFFFFF',
     fontSize: 16,
     lineHeight: 24,
     marginTop: 15,
     fontStyle: 'italic',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
     padding: 15,
     borderRadius: 12,
     borderLeftWidth: 3,
     borderLeftColor: '#FF8E53',
   },
   bioPlaceholder: {
-    color: '#FFFFFF60',
     fontSize: 15,
     lineHeight: 22,
     marginTop: 15,
     fontStyle: 'italic',
     textAlign: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
     padding: 15,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
     borderStyle: 'dashed',
   },
   editBioButton: {
@@ -1496,10 +1489,8 @@ const styles = StyleSheet.create({
     marginTop: 15,
   },
   bioInput: {
-    color: '#FFFFFF',
     fontSize: 16,
     lineHeight: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 12,
     padding: 15,
     borderWidth: 2,
@@ -1518,7 +1509,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   charCount: {
-    color: '#FFFFFF60',
     fontSize: 12,
   },
   saveBioButton: {
@@ -1582,12 +1572,10 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   supportModalContent: {
-    backgroundColor: '#2F0C4D',
     borderRadius: 20,
     width: '100%',
     maxWidth: 400,
     borderWidth: 2,
-    borderColor: '#FF8E53',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -1604,12 +1592,10 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#FFFFFF20',
   },
   supportModalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFFFFF',
   },
   supportCloseButton: {
     padding: 5,
@@ -1623,7 +1609,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   supportMainText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
@@ -1631,7 +1616,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   supportSubText: {
-    color: '#FFFFFF80',
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 25,
@@ -1643,15 +1627,12 @@ const styles = StyleSheet.create({
   },
   supportCancelButton: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     padding: 15,
     borderRadius: 25,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#FFFFFF40',
   },
   supportCancelButtonText: {
-    color: '#FFFFFF80',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -1686,12 +1667,10 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   genderModalContent: {
-    backgroundColor: '#2F0C4D',
     borderRadius: 20,
     width: '100%',
     maxWidth: 400,
     borderWidth: 2,
-    borderColor: '#FF8E53',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
@@ -1708,12 +1687,10 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 15,
     borderBottomWidth: 1,
-    borderBottomColor: '#FFFFFF20',
   },
   genderModalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#FFFFFF',
   },
   genderCloseButton: {
     padding: 5,
@@ -1723,7 +1700,6 @@ const styles = StyleSheet.create({
     paddingTop: 10,
   },
   genderMainText: {
-    color: '#FFFFFF',
     fontSize: 15,
     textAlign: 'center',
     marginBottom: 15,
@@ -1743,18 +1719,15 @@ const styles = StyleSheet.create({
   genderOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     padding: 18,
     borderRadius: 15,
     borderWidth: 1,
-    borderColor: '#FFFFFF20',
   },
   genderEmoji: {
     fontSize: 24,
     marginRight: 15,
   },
   genderOptionText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -1779,5 +1752,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });
