@@ -1,38 +1,105 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 🚧 RÈGLES TEMPORAIRES POUR LE DÉVELOPPEMENT
-    // ⚠️ À REMPLACER EN PRODUCTION
-    
-    // Permettre tout pour les utilisateurs authentifiés (temporaire)
-    match /{document=**} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // 📝 RÈGLES DE PRODUCTION (à décommenter plus tard) :
-    /*
-    // Règles pour les utilisateurs
+    // 👤 Collection utilisateurs
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      // Tout utilisateur connecté peut lire la collection ou un document
+      allow read: if request.auth != null;
+      
+      // Seul le propriétaire du profil peut écrire dessus
+      allow write: if request.auth != null && request.auth.uid == userId;
     }
     
-    // Règles pour les conversations
+    // NOUVELLE RÈGLE : Autoriser la lecture de la liste des utilisateurs
+    match /users {
+      allow list: if request.auth != null;
+    }
+
+    // 💬 Collection conversations
     match /conversations/{conversationId} {
-      allow read, write: if request.auth != null && 
+      // Lecture : participants peuvent lire
+      allow read: if request.auth != null && 
         request.auth.uid in resource.data.participants;
+      
+      // Création : utilisateur authentifié peut créer une conversation où il participe
       allow create: if request.auth != null && 
         request.auth.uid in request.resource.data.participants;
       
-      // Règles pour les messages
-      match /messages/{messageId} {
-        allow read: if request.auth != null && 
-          request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
-        allow create: if request.auth != null && 
-          request.auth.uid == request.resource.data.senderId &&
-          request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
-        allow update, delete: if false;
+      // Mise à jour : participants peuvent modifier
+      allow update: if request.auth != null && 
+        request.auth.uid in resource.data.participants;
+      
+      // Suppression : participants peuvent supprimer (incluant suppression lors de blocage)
+      allow delete: if request.auth != null && 
+        request.auth.uid in resource.data.participants;
+    }
+
+    // 💬 Messages dans les conversations
+    match /conversations/{conversationId}/messages/{messageId} {
+      allow read, write: if request.auth != null && 
+        request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+    }
+
+    // 🚫 Collection utilisateurs bloqués
+    match /blocked_users/{blockId} {
+      // Lecture : seulement le bloqueur peut voir ses bloqués
+      allow read: if request.auth != null && 
+        request.auth.uid == resource.data.blockerId;
+      
+      // Écriture : seulement le bloqueur peut bloquer/débloquer
+      allow create, update: if request.auth != null && 
+        request.auth.uid == request.resource.data.blockerId;
+      
+      // Suppression : seulement le bloqueur peut débloquer
+      allow delete: if request.auth != null && 
+        request.auth.uid == resource.data.blockerId;
+    }
+
+    // ⚙️ Configuration app (lecture publique, écriture interdite)
+    match /app_config/{document} {
+      allow read: if true; // Lecture publique pour le chargement initial
+      allow write: if false; // Seulement via Admin SDK
+      
+      // 📋 Sous-collections dans app_config (comme games/list)
+      match /{subcollection}/{subdocument} {
+        allow read: if true; // Lecture publique pour toutes les sous-collections
+        allow write: if false; // Seulement via Admin SDK
       }
     }
-    */
+
+    // 🎮 Collections de jeux (lecture publique)
+    match /games/{gameId} {
+      allow read: if true; // Lecture publique pour tous les jeux
+      allow write: if false; // Seulement via Admin SDK
+    }
+
+    match /gameRanks/{rankId} {
+      allow read: if true; // Lecture publique pour tous les rangs
+      allow write: if false; // Seulement via Admin SDK
+    }
+
+    match /gameStyles/{styleId} {
+      allow read: if true; // Lecture publique pour tous les styles
+      allow write: if false; // Seulement via Admin SDK
+    }
+
+    match /timeSlots/{slotId} {
+      allow read: if true; // Lecture publique pour tous les créneaux
+      allow write: if false; // Seulement via Admin SDK
+    }
+
+    // 🔄 Compteurs de messages non lus
+    match /unreadCounts/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 📊 Stats et métadonnées utilisateur
+    match /userStats/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // La règle "catch-all" a été supprimée. 
+    // Par défaut, tout ce qui n'est pas autorisé ci-dessus est refusé.
   }
-} 
+}
