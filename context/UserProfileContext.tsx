@@ -30,6 +30,8 @@ interface UserProfile {
   // Limitation changements de date de naissance
   lastBirthDateChangeDate?: Date;
   birthDateChangesToday?: number;
+  // Limitation changements de pseudo
+  lastPseudoChangeDate?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -218,6 +220,7 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
             avatarChangesToday: data.avatarChangesToday,
             lastBirthDateChangeDate: data.lastBirthDateChangeDate?.toDate(),
             birthDateChangesToday: data.birthDateChangesToday,
+            lastPseudoChangeDate: data.lastPseudoChangeDate?.toDate(),
             createdAt: data.createdAt?.toDate() || new Date(),
             updatedAt: data.updatedAt?.toDate() || new Date(),
           });
@@ -377,6 +380,7 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
           avatarChangesToday: data.avatarChangesToday,
           lastBirthDateChangeDate: data.lastBirthDateChangeDate?.toDate(),
           birthDateChangesToday: data.birthDateChangesToday,
+          lastPseudoChangeDate: data.lastPseudoChangeDate?.toDate(),
           createdAt: data.createdAt?.toDate(),
           updatedAt: data.updatedAt?.toDate(),
         });

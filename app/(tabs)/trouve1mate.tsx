@@ -1,23 +1,23 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useConversations } from '../../context/ConversationsContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useUserProfile } from '../../context/UserProfileContext';
-import { BlockingService } from '../../services/blockingService';
 import UserService, { type UserProfile } from '../../services/userService';
 
 const { width } = Dimensions.get('window');
@@ -27,227 +27,182 @@ export default function Trouve1MateScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const { colors, isDarkMode } = useTheme();
   const { createConversation } = useConversations();
   const { user: currentUser } = useAuth();
   const { profile } = useUserProfile();
 
+  const loadUsers = useCallback(async (isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      const discoveryUsers = await UserService.getDiscoveryUsers(currentUser?.uid || '');
+      setUsers(discoveryUsers);
+    } catch (error) {
+      console.error('❌ Erreur chargement utilisateurs:', error);
+      Alert.alert(
+        '😕 Erreur',
+        'Impossible de charger les profils. Vérifiez votre connexion.'
+      );
+    } finally {
+      if (isRefresh) {
+        setRefreshing(false);
+      } else {
+        setLoading(false);
+      }
+    }
+  }, [currentUser?.uid]);
+
   useEffect(() => {
     loadUsers();
-  }, [currentUser]);
+  }, [loadUsers]);
 
-  // 🔄 Rafraîchir automatiquement quand on revient à l'écran
-  useFocusEffect(
-    useCallback(() => {
-      // Vérifier si le cache a été invalidé (après déblocage)
-      const lastCacheInvalidation = UserService.getLastCacheInvalidation();
-      const now = Date.now();
-      
-      // Si le cache a été invalidé dans les 5 dernières secondes, recharger
-      if (lastCacheInvalidation && (now - lastCacheInvalidation) < 5000) {
-        console.log('🔄 Cache invalidé récemment, rechargement automatique...');
-        loadUsers();
-      }
-    }, [])
-  );
-
-  const loadUsers = async () => {
-    if (!currentUser?.uid) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setError(null);
-      console.log('🔍 Chargement des utilisateurs de la plateforme...');
-      
-      // Vider le cache pour forcer la récupération des nouvelles données
-      UserService.clearCache();
-      console.log('🧹 Cache vidé pour récupérer les données utilisateur corrigées');
-      
-      // Récupérer les jeux de l'utilisateur actuel pour un meilleur matching
-      const currentUserGameNames = profile?.games?.map(game => game.name) || [];
-      
-      const platformUsers = await UserService.getDiscoveryUsers(currentUser.uid);
-      
-      // 🚫 Filtrer les utilisateurs bloqués
-      const filteredUsers = await BlockingService.filterBlockedUsers(
-        currentUser.uid, 
-        platformUsers
-      );
-      
-      setUsers(filteredUsers);
-      
-      if (filteredUsers.length === 0) {
-        setError('Aucun utilisateur trouvé pour le moment');
-      }
-      
-    } catch (err) {
-      console.error('❌ Erreur chargement utilisateurs:', err);
-      setError('Erreur lors du chargement des utilisateurs');
-    } finally {
-      setLoading(false);
-    }
+  const openProfile = (userId: string) => {
+    // Navigation vers la page de profil avec l'ID utilisateur
+    router.push(`/user-profile/${userId}`);
   };
 
-  const refreshUsers = async () => {
-    setRefreshing(true);
-    await loadUsers();
-    setRefreshing(false);
-  };
-
-  const connectToUser = async (targetUser: UserProfile) => {
+  const connectToUser = async (item: UserProfile) => {
     try {
-      console.log('🔄 Tentative de connexion avec:', targetUser.name);
+      console.log('🔄 Tentative de connexion avec:', item.name);
       
-      // Vérifications de sécurité
-      if (!targetUser.uid || !targetUser.name) {
-        console.error('❌ Données utilisateur incomplètes:', targetUser);
-        Alert.alert('❌ Erreur', 'Profil utilisateur incomplet');
-        return;
-      }
-
-      // Trouver un jeu en commun en utilisant les vrais jeux de l'utilisateur
-      const currentUserGames = profile?.games || [];
-      const currentUserGameNames = currentUserGames.map(game => game.name).filter(Boolean);
-      const targetUserGames = targetUser.preferences?.favoriteGames || [];
+      const targetUserGames = item.preferences?.favoriteGames || [];
       
-      const commonGames = targetUserGames.filter((game: string) => 
-        currentUserGameNames.includes(game)
-      );
-      const gameInCommon = commonGames.length > 0 ? commonGames[0] : undefined;
-
-      console.log('🎮 Jeux en commun trouvés:', commonGames);
-
-      // Créer le participant pour la conversation avec des valeurs par défaut sécurisées
       const participant = {
-        id: targetUser.uid,
-        name: targetUser.name,
-        avatar: targetUser.avatar || '🎮',
-        isImageAvatar: targetUser.avatar?.startsWith('http') || false,
-        isOnline: targetUser.isOnline || false,
+        id: item.uid,
+        name: item.name,
+        avatar: item.avatar || '🎮',
+        isImageAvatar: item.avatar?.startsWith('http') || false,
+        isOnline: item.isOnline || false,
         ...(targetUserGames[0] && { currentGame: targetUserGames[0] }),
       };
 
-      console.log('👤 Participant créé:', participant);
-
-      // Créer la conversation (ou récupérer l'existante)
       const conversationId = await createConversation(participant);
       
       if (conversationId) {
         console.log('✅ Conversation créée/trouvée:', conversationId);
-        // Rediriger directement vers le chat
         router.push(`/chat/${conversationId}`);
-      } else {
-        console.error('❌ Échec création conversation');
-        Alert.alert(
-          '❌ Erreur',
-          'Impossible de créer la conversation. Réessaie plus tard.',
-          [{ text: 'OK', style: 'default' }]
-        );
       }
     } catch (error) {
       console.error('❌ Erreur connexion utilisateur:', error);
       Alert.alert(
-        '❌ Erreur',
-        'Une erreur est survenue lors de la connexion.',
-        [{ text: 'OK', style: 'default' }]
+        '😕 Erreur',
+        'Impossible de créer la conversation. Réessayez plus tard.'
       );
     }
   };
 
-  const openProfile = (targetUser: UserProfile) => {
-    const games = targetUser.preferences?.favoriteGames || [];
-    const availability = targetUser.preferences?.preferredTimeSlots || [];
+  const renderUserCard = ({ item }: { item: UserProfile }) => {
+    const favoriteGames = item.preferences?.favoriteGames || [];
+    const userBio = item.preferences?.bio || '';
     
-    const profileInfo = [
-      games.length > 0 ? `🎮 Jeux: ${games.join(', ')}` : '',
-      availability.length > 0 ? `⏰ Dispo: ${availability.join(', ')}` : '',
-      targetUser.preferences?.location ? `📍 Localisation: ${targetUser.preferences.location}` : '',
-      targetUser.preferences?.ageRange ? `🎂 Âge: ${targetUser.preferences.ageRange} ans` : '',
-    ].filter(Boolean).join('\n');
+    // Nettoyer la bio : supprimer retours à la ligne multiples et espaces en trop
+    const cleanBio = userBio.replace(/\s+/g, ' ').trim();
+    
+    // Limiter à 80 caractères pour les cards (plus court)
+    const displayBio = cleanBio.length > 80 ? `${cleanBio.substring(0, 80)}...` : cleanBio;
 
-    const bioText = targetUser.preferences?.bio ? `\n\n"${targetUser.preferences.bio}"` : '';
-
-    Alert.alert(
-      `Profil de ${targetUser.name}`,
-      profileInfo + bioText,
-      [{ text: 'Fermer', style: 'default' }]
-    );
-  };
-
-  const renderUserCard = ({ item }: { item: UserProfile }) => (
-    <View style={[styles.mateCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    return (
       <LinearGradient
-        colors={['rgba(255, 255, 255, 0.1)', 'rgba(255, 255, 255, 0.05)']}
-        style={styles.cardGradient}
+        colors={[colors.surface, colors.card]}
+        style={styles.userCard}
       >
-        {/* Header avec avatar et infos */}
-        <View style={styles.mateHeader}>
-          <View style={styles.avatarSection}>
-            <View style={[styles.avatarCircle, { backgroundColor: item.isOnline ? 'rgba(16, 185, 129, 0.2)' : 'rgba(107, 114, 128, 0.2)' }]}>
+        {/* Header de la carte */}
+        <View style={styles.cardHeader}>
+          <View style={styles.avatarContainer}>
+            <LinearGradient
+              colors={item.isOnline ? 
+                ['rgba(16, 185, 129, 0.3)', 'rgba(16, 185, 129, 0.1)'] : 
+                ['rgba(107, 114, 128, 0.3)', 'rgba(107, 114, 128, 0.1)']}
+              style={styles.avatarGradient}
+            >
               {item.avatar?.startsWith('http') || item.avatar?.includes('cloudinary') ? (
                 <Image 
                   source={{ uri: item.avatar }} 
                   style={styles.avatarImage}
-                  onError={() => {
-                    console.log('❌ Erreur chargement avatar trouve1mate:', item.avatar);
-                  }}
                 />
               ) : (
                 <Text style={styles.avatarEmoji}>{item.avatar || '🎮'}</Text>
               )}
-            </View>
-            {item.isOnline && <View style={[styles.onlineIndicator, styles.onlineIndicatorPulse]} />}
-          </View>
-          
-          <View style={styles.mateInfo}>
-            <View style={styles.nameRow}>
-              <Text style={[styles.mateName, { color: colors.text }]}>{item.name}</Text>
-              <View style={styles.userInfoRow}>
-                {item.preferences?.ageRange && <Text style={[styles.mateAge, { color: colors.textSecondary }]}>{item.preferences.ageRange} ans</Text>}
-                {/* Affichage du sexe avec emoji */}
-                {item.preferences?.gender && (
-                  <View style={[styles.genderBadge, { backgroundColor: colors.surface }]}>
-                    <Text style={[styles.genderText, { color: colors.text }]}>
-                      {item.preferences.gender === 'Homme' ? '👨' : 
-                       item.preferences.gender === 'Femme' ? '👩' : 
-                       item.preferences.gender === 'Autre' ? '🧑' : '👤'}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-            {item.preferences?.location && (
-              <Text style={[styles.mateDistance, { color: colors.textSecondary }]}>📍 {item.preferences.location}</Text>
+            </LinearGradient>
+            {item.isOnline && (
+              <LinearGradient
+                colors={['#10B981', '#059669']}
+                style={styles.onlineIndicator}
+              >
+                <View style={styles.onlinePulse} />
+              </LinearGradient>
             )}
-            <View style={styles.matchContainer}>
-              <Text style={[styles.matchText, { color: colors.textSecondary }]}>⭐ Rating: {item.stats.rating}</Text>
-              <Text style={[styles.matchText, { color: colors.textSecondary }]}>🎮 {item.stats.totalGames} jeux</Text>
+          </View>
+
+          <View style={styles.userInfo}>
+            <Text style={[styles.userName, { color: colors.text }]}>{item.name}</Text>
+            
+            <View style={styles.userTags}>
+              {item.preferences?.ageRange && (
+                <View style={[styles.userTag, { backgroundColor: colors.background }]}>
+                  <Text style={[styles.userTagText, { color: colors.text }]}>🎂 {item.preferences.ageRange}</Text>
+                </View>
+              )}
+              {item.preferences?.gender && (
+                <View style={[styles.userTag, { backgroundColor: colors.background }]}>
+                  <Text style={[styles.userTagText, { color: colors.text }]}>
+                    {item.preferences.gender === 'Homme' ? '👨' : 
+                     item.preferences.gender === 'Femme' ? '👩' : '🧑'} {item.preferences.gender.slice(0, 1)}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statEmoji}>⭐</Text>
+                <Text style={[styles.statText, { color: colors.textSecondary }]}>{item.stats.rating}</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statEmoji}>🎮</Text>
+                <Text style={[styles.statText, { color: colors.textSecondary }]}>{item.stats.totalGames}</Text>
+              </View>
+              <View style={styles.statItem}>
+                <Text style={styles.statEmoji}>{item.isOnline ? '🟢' : '⚫'}</Text>
+                <Text style={[styles.statText, { color: item.isOnline ? '#10B981' : colors.textSecondary }]}>
+                  {item.isOnline ? 'En ligne' : 'Hors ligne'}
+                </Text>
+              </View>
             </View>
           </View>
         </View>
 
-        {/* Bio */}
-        {item.preferences?.bio && (
-          <Text style={[styles.mateBio, { color: colors.textSecondary }]}>
-            {item.preferences.bio}
-          </Text>
+        {/* Biographie */}
+        {displayBio && (
+          <View style={styles.bioSection}>
+            <Text style={[styles.bioText, { color: colors.textSecondary }]}>
+              "{displayBio}"
+            </Text>
+          </View>
         )}
 
-        {/* Jeux */}
-        {item.preferences?.favoriteGames && item.preferences.favoriteGames.length > 0 && (
+        {/* Jeux favoris */}
+        {favoriteGames.length > 0 && (
           <View style={styles.gamesSection}>
-            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>🎮 Jeux favoris</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              🎮 Jeux favoris ({favoriteGames.length})
+            </Text>
             <View style={styles.gamesList}>
-              {item.preferences.favoriteGames.slice(0, 4).map((game, index) => (
-                <View key={index} style={[styles.gameTag, { backgroundColor: colors.surface }]}>
-                  <Text style={[styles.gameText, { color: colors.textSecondary }]}>{game}</Text>
+              {favoriteGames.slice(0, 3).map((game, index) => (
+                <View key={index} style={[styles.gameChip, { backgroundColor: colors.background }]}>
+                  <Text style={[styles.gameText, { color: '#8B5CF6' }]}>{game}</Text>
                 </View>
               ))}
-              {item.preferences.favoriteGames.length > 4 && (
-                <View style={[styles.gameTag, { backgroundColor: colors.surface }]}>
-                  <Text style={[styles.gameText, { color: colors.textSecondary }]}>+{item.preferences.favoriteGames.length - 4}</Text>
+              {favoriteGames.length > 3 && (
+                <View style={[styles.gameChip, { backgroundColor: colors.background }]}>
+                  <Text style={[styles.gameText, { color: colors.textSecondary }]}>+{favoriteGames.length - 3}</Text>
                 </View>
               )}
             </View>
@@ -256,137 +211,116 @@ export default function Trouve1MateScreen() {
 
         {/* Disponibilités */}
         {item.preferences?.preferredTimeSlots && item.preferences.preferredTimeSlots.length > 0 && (
-          <View style={styles.availabilitySection}>
-            <Text style={[styles.sectionLabel, { color: colors.textSecondary }]}>⏰ Disponibilités</Text>
-            <View style={styles.timesList}>
-              {item.preferences.preferredTimeSlots.slice(0, 3).map((time, index) => (
-                <View key={index} style={[styles.timeTag, { backgroundColor: colors.surface }]}>
-                  <Text style={[styles.timeText, { color: colors.textSecondary }]}>{time}</Text>
+          <View style={styles.timeSlotsSection}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              ⏰ Disponibilités ({item.preferences.preferredTimeSlots.length})
+            </Text>
+            <View style={styles.timeSlotsList}>
+              {item.preferences.preferredTimeSlots.slice(0, 2).map((timeSlot, index) => (
+                <View key={index} style={[styles.timeSlotChip, { backgroundColor: colors.background }]}>
+                  <Text style={[styles.timeSlotText, { color: '#10B981' }]}>{timeSlot}</Text>
                 </View>
               ))}
-              {item.preferences.preferredTimeSlots.length > 3 && (
-                <View style={[styles.timeTag, { backgroundColor: colors.surface }]}>
-                  <Text style={[styles.timeText, { color: colors.textSecondary }]}>+{item.preferences.preferredTimeSlots.length - 3}</Text>
+              {item.preferences.preferredTimeSlots.length > 2 && (
+                <View style={[styles.timeSlotChip, { backgroundColor: colors.background }]}>
+                  <Text style={[styles.timeSlotText, { color: colors.textSecondary }]}>+{item.preferences.preferredTimeSlots.length - 2}</Text>
                 </View>
               )}
             </View>
           </View>
         )}
 
-        {/* Statut de jeu actuel */}
-        {item.preferences?.favoriteGames && item.preferences.favoriteGames.length > 0 && (
-          <View style={styles.currentGameSection}>
-            <Ionicons name="game-controller" size={16} color="#FF8E53" />
-            <Text style={[styles.currentGameText, { color: colors.textSecondary }]}>
-              Jeu favori: {item.preferences.favoriteGames[0]}
-            </Text>
+        {/* Localisation */}
+        {item.preferences?.location && (
+          <View style={styles.locationSection}>
+            <Ionicons name="location" size={16} color="#FF8E53" />
+            <Text style={[styles.locationText, { color: colors.textSecondary }]}>{item.preferences.location}</Text>
           </View>
         )}
 
-        {/* Actions */}
-        <View style={styles.actionsRow}>
+        {/* Boutons d'action */}
+        <View style={styles.actionsContainer}>
           <TouchableOpacity 
-            style={[styles.profileButton, { backgroundColor: colors.surface }]}
-            onPress={() => openProfile(item)}
-            activeOpacity={0.7}
+            style={[styles.actionButton, styles.profileButton]}
+            onPress={() => openProfile(item.uid)}
+            activeOpacity={0.8}
           >
-            <Ionicons name="person" size={20} color={colors.textSecondary} />
-            <Text style={[styles.profileText, { color: colors.textSecondary }]}>Profil</Text>
+            <LinearGradient
+              colors={['#8B5CF6', '#7C3AED']}
+              style={styles.buttonGradient}
+            >
+              <Ionicons name="person" size={18} color="#FFFFFF" />
+              <Text style={styles.buttonText}>Profil</Text>
+            </LinearGradient>
           </TouchableOpacity>
-          
+
           <TouchableOpacity 
-            style={styles.connectButton}
+            style={[styles.actionButton, styles.connectButton]}
             onPress={() => connectToUser(item)}
             activeOpacity={0.8}
           >
             <LinearGradient
               colors={['#FF8E53', '#FF6B35']}
-              style={styles.connectGradient}
+              style={styles.buttonGradient}
             >
-              <Ionicons name="add" size={20} color="#FFFFFF" />
-              <Text style={styles.connectText}>Connect</Text>
+              <Ionicons name="chatbubble" size={18} color="#FFFFFF" />
+              <Text style={styles.buttonText}>Connecter</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
       </LinearGradient>
-    </View>
-  );
+    );
+  };
 
-  // État de chargement
   if (loading) {
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
-        <LinearGradient colors={colors.gradient as [string, string]} style={styles.gradient}>
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingEmoji}>🎮</Text>
-            <Text style={[styles.loadingText, { color: colors.text }]}>Chargement des mates...</Text>
-          </View>
-        </LinearGradient>
-      </View>
-    );
-  }
-
-  // État d'erreur
-  if (error && users.length === 0) {
-    return (
-      <View style={styles.container}>
-        <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
-        <LinearGradient colors={colors.gradient as [string, string]} style={styles.gradient}>
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorEmoji}>😔</Text>
-            <Text style={[styles.errorTitle, { color: colors.text }]}>Oups !</Text>
-            <Text style={[styles.errorText, { color: colors.textSecondary }]}>{error}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={loadUsers}>
-              <LinearGradient colors={['#FF8E53', '#FF6B35']} style={styles.retryGradient}>
-                <Ionicons name="refresh" size={20} color="#FFFFFF" />
-                <Text style={styles.retryText}>Réessayer</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </LinearGradient>
-      </View>
+      <LinearGradient colors={colors.gradient as [string, string]} style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FF8E53" />
+          <Text style={[styles.loadingText, { color: colors.text }]}>
+            Recherche de mates...
+          </Text>
+        </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
-      <LinearGradient
-        colors={colors.gradient as [string, string]}
-        style={styles.gradient}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={[styles.headerTitle, { color: colors.text }]}>Trouve ton Mate ! 🎮</Text>
-          <Text style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-            {users.length} gamer{users.length > 1 ? 's' : ''} disponible{users.length > 1 ? 's' : ''}
-          </Text>
-        </View>
+    <LinearGradient colors={colors.gradient as [string, string]} style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>🎮 Trouve 1 Mate</Text>
+        <Text style={styles.headerSubtitle}>
+          {users.length} gamers disponibles
+        </Text>
+      </View>
 
-        {/* Liste des utilisateurs */}
-        <FlatList
-          data={users}
-          renderItem={renderUserCard}
-          keyExtractor={(item) => item.uid || `user-${item.name}-${Math.random()}`}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-          refreshing={refreshing}
-          onRefresh={refreshUsers}
-          ListEmptyComponent={
-            !loading && !refreshing ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyEmoji}>🎮</Text>
-                <Text style={[styles.emptyTitle, { color: colors.text }]}>Aucun mate trouvé</Text>
-                <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                  Tire vers le bas pour actualiser ou reviens plus tard !
-                </Text>
-              </View>
-            ) : null
-          }
-        />
-      </LinearGradient>
-    </View>
+      <FlatList
+        data={users}
+        renderItem={renderUserCard}
+        keyExtractor={(item) => item.uid}
+        contentContainerStyle={styles.listContainer}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadUsers(true)}
+            colors={['#FF8E53']}
+            tintColor="#FF8E53"
+          />
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyEmoji}>😔</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              Aucun mate trouvé
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: colors.textSecondary }]}>
+              Tirez vers le bas pour actualiser
+            </Text>
+          </View>
+        }
+      />
+    </LinearGradient>
   );
 }
 
@@ -394,207 +328,132 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  gradient: {
-    flex: 1,
-  },
   header: {
     padding: 20,
     paddingTop: 60,
+    alignItems: 'center',
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
   },
   headerSubtitle: {
-    fontSize: 14,
-    marginTop: 4,
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.8)',
   },
-  listContainer: {
-    padding: 20,
-    paddingBottom: 100,
-  },
-  // États de chargement et d'erreur
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 40,
-  },
-  loadingEmoji: {
-    fontSize: 60,
-    marginBottom: 20,
+    gap: 20,
   },
   loadingText: {
     fontSize: 18,
     fontWeight: '600',
   },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  errorEmoji: {
-    fontSize: 60,
-    marginBottom: 20,
-  },
-  errorTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  errorText: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 30,
-    lineHeight: 24,
-  },
-  retryButton: {
-    borderRadius: 12,
-  },
-  retryGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 8,
-  },
-  retryText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-    minHeight: 300,
-  },
-  emptyEmoji: {
-    fontSize: 60,
-    marginBottom: 20,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  emptyText: {
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  // Cartes utilisateurs
-  mateCard: {
-    marginBottom: 20,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  cardGradient: {
+  listContainer: {
     padding: 20,
+    paddingTop: 0,
   },
-  mateHeader: {
+  userCard: {
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+  },
+  cardHeader: {
     flexDirection: 'row',
     marginBottom: 15,
   },
-  avatarSection: {
+  avatarContainer: {
     position: 'relative',
     marginRight: 15,
   },
-  avatarCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  avatarGradient: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  avatarImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+  },
   avatarEmoji: {
-    fontSize: 28,
+    fontSize: 32,
   },
   onlineIndicator: {
     position: 'absolute',
     bottom: 2,
     right: 2,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: '#10B981',
-    borderWidth: 2,
-    borderColor: '#2F0C4D',
-  },
-  onlineIndicatorPulse: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderWidth: 2,
-    borderColor: 'rgba(16, 185, 129, 0.2)',
-  },
-  mateInfo: {
-    flex: 1,
-  },
-  nameRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  mateName: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  userInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  mateAge: {
-    fontSize: 14,
-  },
-  genderInfo: {
-    fontSize: 16,
-  },
-  genderBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    width: 20,
+    height: 20,
     borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  genderText: {
-    fontSize: 14,
-    fontWeight: '500',
+  onlinePulse: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFFFFF',
   },
-  mateDistance: {
-    fontSize: 14,
-    marginTop: 4,
+  userInfo: {
+    flex: 1,
+    justifyContent: 'center',
   },
-  matchContainer: {
-    marginTop: 8,
+  userName: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 8,
   },
-  matchText: {
+  userTags: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  userTag: {
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  userTagText: {
     fontSize: 12,
     fontWeight: '600',
-    marginBottom: 4,
   },
-  matchBar: {
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 2,
-    overflow: 'hidden',
+  statsRow: {
+    flexDirection: 'row',
+    gap: 15,
   },
-  matchFill: {
-    height: '100%',
-    backgroundColor: '#FF8E53',
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  mateBio: {
+  statEmoji: {
     fontSize: 14,
-    fontStyle: 'italic',
+  },
+  statText: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  bioSection: {
     marginBottom: 15,
+  },
+  bioText: {
+    fontSize: 14,
     lineHeight: 20,
+    fontStyle: 'italic',
   },
   gamesSection: {
     marginBottom: 15,
   },
-  sectionLabel: {
+  sectionTitle: {
     fontSize: 14,
     fontWeight: '600',
     marginBottom: 8,
@@ -604,84 +463,92 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 6,
   },
-  gameTag: {
-    backgroundColor: 'rgba(139, 92, 246, 0.3)',
-    borderRadius: 12,
+  gameChip: {
+    borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 4,
+    backgroundColor: 'rgba(139, 92, 246, 0.2)',
   },
   gameText: {
-    color: '#8B5CF6',
     fontSize: 12,
     fontWeight: '500',
   },
-  availabilitySection: {
+  timeSlotsSection: {
     marginBottom: 15,
   },
-  timesList: {
+  timeSlotsList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 6,
   },
-  timeTag: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderRadius: 12,
+  timeSlotChip: {
+    borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 4,
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
   },
-  timeText: {
-    color: '#10B981',
+  timeSlotText: {
     fontSize: 12,
     fontWeight: '500',
   },
-  currentGameSection: {
+  locationSection: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     marginBottom: 15,
-    gap: 8,
   },
-  currentGameText: {
+  locationText: {
     fontSize: 14,
     fontWeight: '500',
   },
-  actionsRow: {
+  actionsContainer: {
     flexDirection: 'row',
     gap: 12,
   },
-  profileButton: {
+  actionButton: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 12,
-    padding: 12,
-    gap: 6,
+    borderRadius: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
-  profileText: {
-    fontSize: 14,
-    fontWeight: '500',
+  profileButton: {
+    shadowColor: '#8B5CF6',
   },
   connectButton: {
-    flex: 1,
-    borderRadius: 12,
+    shadowColor: '#FF8E53',
   },
-  connectGradient: {
+  buttonGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     padding: 12,
-    borderRadius: 12,
-    gap: 6,
+    borderRadius: 15,
+    gap: 8,
   },
-  connectText: {
+  buttonText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
-  avatarImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 100,
+  },
+  emptyEmoji: {
+    fontSize: 60,
+    marginBottom: 20,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 16,
+    textAlign: 'center',
   },
 }); 

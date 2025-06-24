@@ -52,6 +52,13 @@ export default function HomeScreen() {
   const [showContactSupportModal, setShowContactSupportModal] = useState(false);
   const [showGenderModal, setShowGenderModal] = useState(false);
 
+  // États pour validation du pseudo
+  const [pseudoValidation, setPseudoValidation] = useState<{
+    isValid: boolean;
+    message: string;
+    color: string;
+  } | null>(null);
+
   // Mettre à jour les states locaux quand le profil change
   useEffect(() => {
     if (profile?.pseudo) {
@@ -61,6 +68,16 @@ export default function HomeScreen() {
       setBioText(profile.bio || '');
     }
   }, [profile?.pseudo, profile?.bio]);
+
+  // Réinitialiser la validation quand on arrête d'éditer le pseudo
+  useEffect(() => {
+    if (!isEditingProfile) {
+      setPseudoValidation(null);
+      if (profile?.pseudo) {
+        setPseudo(profile.pseudo);
+      }
+    }
+  }, [isEditingProfile, profile?.pseudo]);
 
   // Resynchroniser quand l'édition se ferme
   useEffect(() => {
@@ -75,13 +92,173 @@ export default function HomeScreen() {
   };
 
   const handleSavePseudo = async () => {
-    if (profile && pseudo !== profile.pseudo) {
-      const success = await updateProfile({ pseudo });
-      if (success) {
-        console.log('✅ Pseudo mis à jour:', pseudo);
-      }
+    if (!profile || !pseudo.trim()) {
+      setIsEditingProfile(false);
+      return;
     }
+
+    const trimmedPseudo = pseudo.trim();
+
+    // Validation longueur
+    if (trimmedPseudo.length < 2) {
+      Alert.alert(
+        "❌ Pseudo trop court",
+        "Ton pseudo doit contenir au moins 2 caractères.",
+        [{ text: "OK", style: "default" }]
+      );
+      return;
+    }
+
+    if (trimmedPseudo.length > 10) {
+      Alert.alert(
+        "❌ Pseudo trop long",
+        "Ton pseudo ne peut pas dépasser 10 caractères.",
+        [{ text: "OK", style: "default" }]
+      );
+      return;
+    }
+
+    // Validation caractères autorisés (lettres, chiffres, espaces, tirets, underscores)
+    const validPseudoRegex = /^[a-zA-Z0-9\s\-_À-ÿ]+$/;
+    if (!validPseudoRegex.test(trimmedPseudo)) {
+      Alert.alert(
+        "❌ Caractères non autorisés",
+        "Ton pseudo ne peut contenir que des lettres, chiffres, espaces, tirets et underscores.",
+        [{ text: "OK", style: "default" }]
+      );
+      return;
+    }
+
+    // Vérifier limite de changements (1 fois par semaine)
+    const today = new Date();
+    const lastChangeDate = profile.lastPseudoChangeDate;
+    const daysSinceChange = lastChangeDate ? 
+      Math.floor((today.getTime() - lastChangeDate.getTime()) / (1000 * 60 * 60 * 24)) : 
+      Infinity;
+
+    if (profile.pseudo && daysSinceChange < 7) {
+      const remainingDays = 7 - daysSinceChange;
+      Alert.alert(
+        "🔒 Limite atteinte",
+        `Tu peux changer ton pseudo seulement une fois par semaine.\n\nProchaine modification possible dans ${remainingDays} jour${remainingDays > 1 ? 's' : ''}.`,
+        [{ text: "OK", style: "default" }]
+      );
+      return;
+    }
+
+    // Si pas de changement, juste fermer l'édition
+    if (trimmedPseudo === profile.pseudo) {
+      setIsEditingProfile(false);
+      return;
+    }
+
+    try {
+      const success = await updateProfile({ 
+        pseudo: trimmedPseudo,
+        lastPseudoChangeDate: new Date()
+      });
+      
+      if (success) {
+        console.log('✅ Pseudo mis à jour:', trimmedPseudo);
+        Alert.alert(
+          "✅ Pseudo modifié",
+          `Ton pseudo a été changé pour "${trimmedPseudo}".\n\nProchaine modification possible dans 7 jours.`,
+          [{ text: "OK", style: "default" }]
+        );
+      } else {
+        Alert.alert(
+          "❌ Erreur",
+          "Impossible de modifier le pseudo. Réessaye plus tard.",
+          [{ text: "OK", style: "default" }]
+        );
+      }
+    } catch (error) {
+      console.error('❌ Erreur sauvegarde pseudo:', error);
+      Alert.alert(
+        "❌ Erreur inattendue",
+        "Une erreur s'est produite. Vérifiez votre connexion et réessayez.",
+        [{ text: "OK", style: "default" }]
+      );
+    }
+    
     setIsEditingProfile(false);
+  };
+
+  // Fonction de validation du pseudo en temps réel
+  const validatePseudo = (text: string) => {
+    const trimmed = text.trim();
+    
+    if (trimmed.length === 0) {
+      setPseudoValidation(null);
+      return;
+    }
+
+    if (trimmed.length < 2) {
+      setPseudoValidation({
+        isValid: false,
+        message: `${trimmed.length}/10 - Trop court (min. 2)`,
+        color: '#FF6B6B'
+      });
+      return;
+    }
+
+    if (trimmed.length > 10) {
+      setPseudoValidation({
+        isValid: false,
+        message: `${trimmed.length}/10 - Trop long !`,
+        color: '#FF6B6B'
+      });
+      return;
+    }
+
+    const validPseudoRegex = /^[a-zA-Z0-9\s\-_À-ÿ]+$/;
+    if (!validPseudoRegex.test(trimmed)) {
+      setPseudoValidation({
+        isValid: false,
+        message: `${trimmed.length}/10 - Caractères interdits`,
+        color: '#FF6B6B'
+      });
+      return;
+    }
+
+    // Vérification si changement nécessaire
+    if (trimmed === profile?.pseudo) {
+      setPseudoValidation({
+        isValid: true,
+        message: `${trimmed.length}/10 - Aucun changement`,
+        color: '#FFA500'
+      });
+      return;
+    }
+
+    // Vérification de la limite de temps
+    const today = new Date();
+    const lastChangeDate = profile?.lastPseudoChangeDate;
+    const daysSinceChange = lastChangeDate ? 
+      Math.floor((today.getTime() - lastChangeDate.getTime()) / (1000 * 60 * 60 * 24)) : 
+      Infinity;
+
+    if (profile?.pseudo && daysSinceChange < 7) {
+      const remainingDays = 7 - daysSinceChange;
+      setPseudoValidation({
+        isValid: false,
+        message: `${trimmed.length}/10 - Changement dans ${remainingDays}j`,
+        color: '#FF8E53'
+      });
+      return;
+    }
+
+    setPseudoValidation({
+      isValid: true,
+      message: `${trimmed.length}/10 - Prêt à sauvegarder ✅`,
+      color: '#4CAF50'
+    });
+  };
+
+  // Gérer le changement du pseudo avec validation
+  const handlePseudoChange = (text: string) => {
+    setPseudo(text);
+    validatePseudo(text);
   };
 
   // Nouvelle fonction pour sauvegarder la bio
@@ -447,15 +624,41 @@ export default function HomeScreen() {
               
               {isEditingProfile ? (
                 <View style={styles.editingContainer}>
-                  <TextInput
-                    style={[styles.pseudoInput, { color: colors.text, borderBottomColor: colors.textSecondary }]}
-                    value={pseudo}
-                    onChangeText={setPseudo}
-                    autoFocus
-                  />
+                  <View style={styles.pseudoInputContainer}>
+                    <TextInput
+                      style={[
+                        styles.pseudoInput, 
+                        { 
+                          color: colors.text, 
+                          borderBottomColor: pseudoValidation?.color || colors.textSecondary,
+                          borderBottomWidth: 2
+                        }
+                      ]}
+                      value={pseudo}
+                      onChangeText={handlePseudoChange}
+                      placeholder="Ton pseudo gaming..."
+                      placeholderTextColor={colors.textSecondary}
+                      maxLength={10}
+                      autoFocus
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    {pseudoValidation && (
+                      <Text style={[styles.pseudoValidationText, { color: pseudoValidation.color }]}>
+                        {pseudoValidation.message}
+                      </Text>
+                    )}
+                  </View>
                   <TouchableOpacity 
-                    style={styles.saveButton}
+                    style={[
+                      styles.saveButton,
+                      { 
+                        opacity: pseudoValidation?.isValid === false ? 0.5 : 1,
+                        backgroundColor: pseudoValidation?.isValid ? '#4CAF50' : '#FF8E53'
+                      }
+                    ]}
                     onPress={handleSavePseudo}
+                    disabled={pseudoValidation?.isValid === false}
                   >
                     <Ionicons name="checkmark" size={20} color="#FFFFFF" />
                   </TouchableOpacity>
@@ -594,7 +797,9 @@ export default function HomeScreen() {
                         color: colors.text,
                         backgroundColor: colors.surface 
                       }]}>
-                        "{profile.bio}"
+                        "{profile.bio.length > 150 
+                          ? `${profile.bio.substring(0, 150)}...` 
+                          : profile.bio}"
                       </Text>
                     ) : (
                       <Text style={[styles.bioPlaceholder, { 
@@ -1017,18 +1222,36 @@ const styles = StyleSheet.create({
   },
   editingContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
+    flex: 1,
+  },
+  pseudoInputContainer: {
+    flex: 1,
+    marginRight: 10,
   },
   pseudoInput: {
     fontSize: 20,
     fontWeight: 'bold',
-    borderBottomWidth: 1,
-    paddingVertical: 5,
+    borderBottomWidth: 2,
+    paddingVertical: 8,
+    paddingHorizontal: 0,
     minWidth: 150,
   },
+  pseudoValidationText: {
+    fontSize: 11,
+    marginTop: 4,
+    fontWeight: '500',
+  },
   saveButton: {
-    marginLeft: 10,
-    padding: 5,
+    backgroundColor: '#FF8E53',
+    borderRadius: 20,
+    padding: 8,
+    marginTop: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   pseudoContainer: {
     flexDirection: 'row',

@@ -30,11 +30,32 @@ export default function LoginScreen() {
         Alert.alert('Erreur', result.error || 'Connexion échouée');
       }
     } else {
+      // Validation du pseudo pour l'inscription
+      const trimmedPseudo = pseudo.trim();
+      
+      if (trimmedPseudo.length < 2) {
+        Alert.alert('Erreur', 'Le pseudo doit contenir au moins 2 caractères');
+        return;
+      }
+      
+      if (trimmedPseudo.length > 10) {
+        Alert.alert('Erreur', 'Le pseudo ne peut pas dépasser 10 caractères');
+        return;
+      }
+      
+      // Validation caractères autorisés (lettres, chiffres, espaces, tirets, underscores)
+      const validPseudoRegex = /^[a-zA-Z0-9\s\-_À-ÿ]+$/;
+      if (!validPseudoRegex.test(trimmedPseudo)) {
+        Alert.alert('Erreur', 'Le pseudo ne peut contenir que des lettres, chiffres, espaces, tirets et underscores');
+        return;
+      }
+      
       if (password !== confirmPassword) {
         Alert.alert('Erreur', 'Les mots de passe ne correspondent pas');
         return;
       }
-      const result = await register(email, password, pseudo);
+      
+      const result = await register(email, password, trimmedPseudo);
       if (result.success) {
         router.replace('/(tabs)');
       } else {
@@ -89,10 +110,13 @@ export default function LoginScreen() {
                 <Ionicons name="person-outline" size={20} color="#FFFFFF80" style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Pseudo"
+                  placeholder="Pseudo (max 10 caractères)"
                   placeholderTextColor="#FFFFFF80"
                   value={pseudo}
                   onChangeText={setPseudo}
+                  maxLength={10}
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
               </View>
             )}
