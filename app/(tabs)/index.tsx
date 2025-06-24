@@ -689,16 +689,6 @@ export default function HomeScreen() {
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>📝 Ma Biographie</Text>
-                <TouchableOpacity 
-                  style={styles.editBioButton}
-                  onPress={() => setIsEditingBio(!isEditingBio)}
-                >
-                  <Ionicons 
-                    name={isEditingBio ? "checkmark" : "pencil"} 
-                    size={20} 
-                    color="#FF8E53" 
-                  />
-                </TouchableOpacity>
               </View>
               
               <View style={styles.bioSection}>
@@ -908,6 +898,7 @@ export default function HomeScreen() {
                   >
                     <Text style={[
                       styles.timeSlotText,
+                      { color: colors.text },
                       profile?.availability?.some((slot: any) => 
                         (typeof slot === 'string' ? slot : slot.label || slot) === timeSlotLabel
                       ) && styles.timeSlotTextActive
@@ -940,6 +931,7 @@ export default function HomeScreen() {
                 <TouchableOpacity 
                   onPress={() => setIsGameModalVisible(false)}
                   style={styles.closeButton}
+                  activeOpacity={0.7}
                 >
                   <Ionicons name="close" size={24} color={colors.textSecondary} />
                 </TouchableOpacity>
@@ -952,6 +944,7 @@ export default function HomeScreen() {
                   <TouchableOpacity 
                     style={[styles.modalGameItem, { borderBottomColor: colors.border }]}
                     onPress={() => addGame(item)}
+                    activeOpacity={0.7}
                   >
                     <Text style={styles.gameIcon}>{item.icon}</Text>
                     <View style={styles.modalGameInfo}>
@@ -982,6 +975,7 @@ export default function HomeScreen() {
                 <TouchableOpacity 
                   onPress={() => setIsEditGameModalVisible(false)}
                   style={styles.simpleCloseButton}
+                  activeOpacity={0.7}
                 >
                   <Ionicons name="close" size={24} color="#FF8E53" />
                 </TouchableOpacity>
@@ -1007,6 +1001,7 @@ export default function HomeScreen() {
                           selectedRank === (typeof rank === 'string' ? rank : rank.name || rank.id) && styles.simpleRankButtonSelected
                         ]}
                         onPress={() => setSelectedRank(typeof rank === 'string' ? rank : rank.name || rank.id)}
+                        activeOpacity={0.7}
                       >
                         <Text style={[
                           styles.simpleRankText,
@@ -1038,6 +1033,7 @@ export default function HomeScreen() {
                             selectedStyle.includes(styleName) && styles.simpleStyleButtonSelected
                           ]}
                           onPress={() => toggleStyle(styleName)}
+                          activeOpacity={0.7}
                         >
                           <Text style={[
                             styles.simpleStyleText,
@@ -1056,6 +1052,7 @@ export default function HomeScreen() {
                 <TouchableOpacity 
                   style={styles.simpleSaveButton}
                   onPress={saveGameDetails}
+                  activeOpacity={0.8}
                 >
                   <Text style={styles.simpleSaveButtonText}>✅ Sauvegarder</Text>
                 </TouchableOpacity>
@@ -1351,57 +1348,73 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(47, 12, 77, 0.85)',
     justifyContent: 'flex-end',
   },
   modalContent: {
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '70%',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    maxHeight: '80%',
     paddingBottom: 40,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -5,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 15,
+    elevation: 25,
   },
   editModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    backgroundColor: 'rgba(47, 12, 77, 0.85)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
   editModalContent: {
     backgroundColor: '#2F0C4D',
-    borderRadius: 20,
+    borderRadius: 25,
     width: '95%',
-    maxWidth: 400,
-    maxHeight: '80%',
+    maxWidth: 420,
+    maxHeight: '85%',
     paddingBottom: 20,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
-      height: 10,
+      height: 15,
     },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 20,
+    shadowOpacity: 0.4,
+    shadowRadius: 25,
+    elevation: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 142, 83, 0.3)',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
+    paddingBottom: 15,
     borderBottomWidth: 1,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
   },
   closeButton: {
-    padding: 5,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   modalGameItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
+    padding: 18,
     borderBottomWidth: 1,
+    marginHorizontal: 5,
+    borderRadius: 12,
+    marginVertical: 2,
   },
   modalGameInfo: {
     flex: 1,
@@ -1572,116 +1585,169 @@ const styles = StyleSheet.create({
   // Nouveaux styles simples pour la modal
   simpleModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(47, 12, 77, 0.9)', // Violet foncé transparent
+    backgroundColor: 'rgba(47, 12, 77, 0.92)',
     justifyContent: 'flex-end',
   },
   simpleModalContent: {
-    borderTopLeftRadius: 25,
-    borderTopRightRadius: 25,
-    maxHeight: '85%',
-    minHeight: '60%',
-    borderTopWidth: 3,
-    borderTopColor: '#FF8E53', // Bordure orange
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    maxHeight: '90%',
+    minHeight: '65%',
+    borderTopWidth: 4,
+    borderTopColor: '#FF8E53',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -10,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 30,
   },
   simpleModalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
-    paddingBottom: 15,
+    padding: 25,
+    paddingBottom: 20,
     borderBottomWidth: 1,
+    backgroundColor: 'rgba(255, 142, 83, 0.05)',
   },
   simpleModalTitle: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: 'bold',
   },
   simpleCloseButton: {
-    padding: 5,
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 142, 83, 0.2)',
   },
   simpleModalBody: {
-    padding: 20,
-    paddingTop: 10,
+    padding: 25,
+    paddingTop: 15,
   },
   simpleSection: {
-    marginBottom: 25,
+    marginBottom: 30,
   },
   simpleSectionTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    marginBottom: 5,
+    marginBottom: 8,
   },
   simpleSectionSubtitle: {
-    fontSize: 14,
-    marginBottom: 15,
+    fontSize: 15,
+    marginBottom: 18,
+    lineHeight: 22,
   },
   simpleRankScroll: {
-    marginBottom: 10,
+    marginBottom: 15,
   },
   simpleRankButton: {
-    backgroundColor: '#FFFFFF20', // Fond semi-transparent blanc
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 22,
+    paddingVertical: 14,
     borderRadius: 25,
-    marginRight: 10,
+    marginRight: 12,
     borderWidth: 2,
-    borderColor: '#FFFFFF40', // Bordure blanche semi-transparente
-  },
-  simpleRankButtonSelected: {
-    backgroundColor: '#FF8E53', // Orange NextMate
-    borderColor: '#FF8E53',
-  },
-  simpleRankText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  simpleRankTextSelected: {
-    color: '#FFFFFF', // Gardé car bouton sélectionné orange
-  },
-  simpleStyleGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  simpleStyleButton: {
-    backgroundColor: '#FFFFFF20', // Fond semi-transparent blanc
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#FFFFFF40', // Bordure blanche semi-transparente
-    minWidth: '45%',
-    alignItems: 'center',
-  },
-  simpleStyleButtonSelected: {
-    backgroundColor: '#6B46C1', // Violet NextMate
-    borderColor: '#6B46C1',
-  },
-  simpleStyleText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  simpleStyleTextSelected: {
-    color: '#FFFFFF', // Gardé car bouton sélectionné violet
-  },
-  simpleSaveButton: {
-    backgroundColor: '#FF8E53', // Orange NextMate pour le bouton principal
-    padding: 18,
-    borderRadius: 25,
-    alignItems: 'center',
-    marginTop: 10,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 2,
     },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  simpleRankButtonSelected: {
+    backgroundColor: '#FF8E53',
+    borderColor: '#FF8E53',
+    shadowColor: '#FF8E53',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
     shadowOpacity: 0.3,
     shadowRadius: 8,
-    elevation: 8,
+    elevation: 6,
+    transform: [{ scale: 1.02 }],
+  },
+  simpleRankText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  simpleRankTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  simpleStyleGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  simpleStyleButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 22,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    minWidth: '45%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  simpleStyleButtonSelected: {
+    backgroundColor: '#6B46C1',
+    borderColor: '#6B46C1',
+    shadowColor: '#6B46C1',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+    transform: [{ scale: 1.02 }],
+  },
+  simpleStyleText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  simpleStyleTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  simpleSaveButton: {
+    backgroundColor: '#FF8E53',
+    padding: 20,
+    borderRadius: 28,
+    alignItems: 'center',
+    marginTop: 20,
+    shadowColor: '#FF8E53',
+    shadowOffset: {
+      width: 0,
+      height: 8,
+    },
+    shadowOpacity: 0.4,
+    shadowRadius: 15,
+    elevation: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   simpleSaveButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   // Styles pour la section biographie
   bioSection: {
