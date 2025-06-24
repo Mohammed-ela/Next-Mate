@@ -2,21 +2,21 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert,
-  Animated,
-  AppState,
-  Dimensions,
-  FlatList,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  Vibration,
-  View
+    Alert,
+    Animated,
+    AppState,
+    Dimensions,
+    FlatList,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    Vibration,
+    View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
@@ -414,6 +414,20 @@ function ChatContent() {
       setIsTyping(false);
     }, PERFORMANCE_CONFIG.TYPING_DEBOUNCE);
   }, [isTyping]);
+
+  // 🧹 Nettoyage des timeouts lors du démontage
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+      }
+      if (markAsReadIntervalRef.current) {
+        clearInterval(markAsReadIntervalRef.current);
+        markAsReadIntervalRef.current = null;
+      }
+    };
+  }, []); // ✅ Nettoyage au démontage
 
   // 📤 Envoi de message avec vibration
   const handleSendMessage = useCallback(async () => {

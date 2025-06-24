@@ -11,7 +11,7 @@ import {
 import { db } from '../config/firebase';
 import cacheManager from '../utils/cacheManager';
 import { cleanObjectForFirestore, safeTimestampToDate } from '../utils/firebaseHelpers';
-import logger from '../utils/logger';
+import { logger } from '../utils/logger';
 import AppConfigService from './appConfigService';
 import { BlockingService } from './blockingService';
 

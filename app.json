@@ -33,12 +33,20 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router"
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#FF8E53",
+          "defaultChannel": "default"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
     },
-        "extra": {
+    "extra": {
       "googleClientId": "369533672786-84t9hgfmrouguqhvrg88b4d0dq9c2p7j.apps.googleusercontent.com"
     }
   }

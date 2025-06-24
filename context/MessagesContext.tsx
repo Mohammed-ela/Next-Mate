@@ -10,13 +10,16 @@ import {
     serverTimestamp,
     updateDoc
 } from 'firebase/firestore';
-import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { db } from '../config/firebase';
+import { notificationService } from '../services/notificationService';
 import { safeTimestampToDate } from '../utils/firebaseHelpers';
+import { logger } from '../utils/logger';
 import { useAuth } from './AuthContext';
+// 📱 Import du service notifications (en douceur)
 
-// Types étendus pour supporter les invitations de jeu
+// 🔧 Interface Message unifiée et cohérente
 interface Message {
   id: string;
   senderId: string;
@@ -30,6 +33,7 @@ interface Message {
   };
 }
 
+// 🔧 Interface du contexte corrigée
 interface MessagesContextType {
   messages: Message[];
   loading: boolean;
@@ -37,17 +41,12 @@ interface MessagesContextType {
   sendGameInvite: (conversationId: string, gameId: string, gameName: string) => Promise<void>;
 }
 
-const MessagesContext = createContext<MessagesContextType>({
-  messages: [],
-  loading: true,
-  sendMessage: async () => {},
-  sendGameInvite: async () => {},
-});
+const MessagesContext = createContext<MessagesContextType | undefined>(undefined);
 
 export const useMessages = () => {
   const context = useContext(MessagesContext);
   if (!context) {
-    throw new Error('useMessages doit être utilisé dans un MessagesProvider');
+    throw new Error('useMessages must be used within a MessagesProvider');
   }
   return context;
 };
@@ -63,11 +62,11 @@ export const MessagesProvider: React.FC<MessagesProviderProps> = ({
 }) => {
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const previousMessageIdsRef = useRef<string[]>([]);
 
-  // Envoyer un message (texte ou invitation)
-  const sendMessage = async (
+  // 📨 Envoyer un message (texte ou invitation)
+  const sendMessage = useCallback(async (
     conversationId: string, 
     content: string, 
     type: 'text' | 'game_invite' = 'text'
@@ -115,17 +114,17 @@ export const MessagesProvider: React.FC<MessagesProviderProps> = ({
           await updateDoc(conversationRef, updates);
         }
 
-        console.log('📨 Message envoyé - notifications push désactivées temporairement');
+        logger.debug('Messages', '✅ Message envoyé et compteurs mis à jour');
       }
 
-      console.log('✅ Message envoyé:', content.trim());
     } catch (error) {
-      console.error('❌ Erreur envoi message:', error);
+      logger.error('Messages', 'Erreur envoi message', error);
+      throw error;
     }
-  };
+  }, [user]);
 
-  // Envoyer une invitation de jeu spécialisée
-  const sendGameInvite = async (conversationId: string, gameId: string, gameName: string) => {
+  // 🎮 Envoyer une invitation de jeu spécialisée
+  const sendGameInvite = useCallback(async (conversationId: string, gameId: string, gameName: string) => {
     if (!user) return;
 
     try {
@@ -155,7 +154,7 @@ export const MessagesProvider: React.FC<MessagesProviderProps> = ({
         updatedAt: serverTimestamp(),
       });
 
-      // 🔢 CORRECTION : Incrémenter les compteurs comme dans sendMessage
+      // Incrémenter les compteurs comme dans sendMessage
       const conversationDoc = await getDoc(conversationRef);
       
       if (conversationDoc.exists()) {
@@ -163,7 +162,6 @@ export const MessagesProvider: React.FC<MessagesProviderProps> = ({
         const participants = data.participants || [];
         const otherParticipants = participants.filter((id: string) => id !== user.uid);
         
-        // Incrémenter le compteur pour chaque autre participant
         const updates: Record<string, any> = {};
         otherParticipants.forEach((participantId: string) => {
           updates[`unreadCounts.${participantId}`] = increment(1);
@@ -171,17 +169,17 @@ export const MessagesProvider: React.FC<MessagesProviderProps> = ({
         
         if (Object.keys(updates).length > 0) {
           await updateDoc(conversationRef, updates);
-          console.log('🔢 Compteurs messages non lus mis à jour pour invitation');
         }
       }
 
-      console.log('🎮 Invitation de jeu envoyée:', gameName);
+      logger.info('Messages', '🎮 Invitation de jeu envoyée', { gameName });
     } catch (error) {
-      console.error('❌ Erreur envoi invitation:', error);
+      logger.error('Messages', 'Erreur envoi invitation', error);
+      throw error;
     }
-  };
+  }, [user]);
 
-  // Écouter les messages avec support des invitations de jeu
+  // 👂 Écouter les messages - UN SEUL useEffect unifié
   useEffect(() => {
     if (!conversationId) {
       setMessages([]);
@@ -190,7 +188,11 @@ export const MessagesProvider: React.FC<MessagesProviderProps> = ({
       return;
     }
 
-    console.log('🔄 Initialisation écoute messages pour:', conversationId);
+    // Initialiser le service de notifications une seule fois
+    notificationService.initialize();
+
+    setLoading(true);
+    logger.debug('Messages', 'Initialisation écoute messages pour', conversationId);
 
     const messagesQuery = query(
       collection(db, 'conversations', conversationId, 'messages'),
@@ -199,7 +201,7 @@ export const MessagesProvider: React.FC<MessagesProviderProps> = ({
 
     const unsubscribe = onSnapshot(
       messagesQuery,
-      (snapshot) => {
+      async (snapshot) => {
         const messagesData: Message[] = snapshot.docs.map(doc => ({
           id: doc.id,
           senderId: doc.data().senderId,
@@ -209,16 +211,30 @@ export const MessagesProvider: React.FC<MessagesProviderProps> = ({
           gameInvite: doc.data().gameInvite,
         }));
 
-        // Vérifier s'il y a de nouveaux messages (pas de moi) en utilisant la ref
+        // 🔔 Détecter nouveaux messages pour notifications locales
         const newMessages = messagesData.filter(m => 
           !previousMessageIdsRef.current.includes(m.id) && 
           m.senderId !== user?.uid &&
           m.type !== 'system'
         );
 
-        // Note: Notifications locales retirées - à réimplémenter plus tard
-        if (newMessages.length > 0 && AppState.currentState === 'active') {
-          console.log('📨 Nouveaux messages reçus - notifications désactivées temporairement');
+        // 📱 Envoyer notifications locales pour nouveaux messages
+        if (newMessages.length > 0 && user && AppState.currentState !== 'active') {
+          for (const message of newMessages) {
+            try {
+              const senderDoc = await getDoc(doc(db, 'users', message.senderId));
+              const senderData = senderDoc.data();
+              const senderName = senderData?.pseudo || senderData?.displayName || 'Utilisateur';
+              
+              await notificationService.notifyNewMessage(
+                senderName,
+                message.content,
+                conversationId
+              );
+            } catch (error) {
+              logger.error('Messages', 'Erreur notification nouveau message', error);
+            }
+          }
         }
 
         // Mettre à jour la ref avec les nouveaux IDs
@@ -226,10 +242,10 @@ export const MessagesProvider: React.FC<MessagesProviderProps> = ({
 
         setMessages(messagesData);
         setLoading(false);
-        console.log(`💬 ${messagesData.length} messages synchronisés`);
+        logger.debug('Messages', `💬 ${messagesData.length} messages synchronisés`);
       },
       (error) => {
-        console.error('❌ Erreur écoute messages:', error);
+        logger.error('Messages', 'Erreur écoute messages', error);
         setLoading(false);
       }
     );

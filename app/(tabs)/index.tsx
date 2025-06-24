@@ -17,11 +17,11 @@ import {
   TouchableOpacity,
   View
 } from "react-native";
+// Removed invalid import - Game type defined locally
 import { useAppConfig } from '../../context/AppConfigContext';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useUserProfile } from '../../context/UserProfileContext';
-import type { Game } from '../../services/appConfigService';
 import ImageService from '../../services/imageService';
 
 export default function HomeScreen() {
@@ -38,7 +38,7 @@ export default function HomeScreen() {
 
   // Nouveaux états pour l'édition des jeux
   const [isEditGameModalVisible, setIsEditGameModalVisible] = useState(false);
-  const [selectedGame, setSelectedGame] = useState<Game | null>(null);
+  const [selectedGame, setSelectedGame] = useState<any | null>(null);
   const [selectedRank, setSelectedRank] = useState('');
   const [selectedStyle, setSelectedStyle] = useState<string[]>([]);
 

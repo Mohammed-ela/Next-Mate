@@ -218,4 +218,25 @@ export const clearTimerCategory = (category: string) => timerManager.clearCatego
 
 export const getTimerStats = () => timerManager.getStats();
 
+export const cleanupAllTimers = () => {
+  logger.info('TimerManager', '🧹 Nettoyage global des timers...');
+  
+  // Utiliser la méthode publique clearAll au lieu d'accéder directement à timers
+  timerManager.clearAll();
+  logger.info('TimerManager', '✅ Tous les timers ont été nettoyés');
+};
+
+export const startTimerWatchdog = () => {
+  const watchdogInterval = setInterval(() => {
+    // Utiliser la méthode publique getStats au lieu d'accéder directement à timers
+    const stats = timerManager.getStats();
+    const activeTimers = stats.total || 0; // Utiliser la propriété 'total' qui existe
+    if (activeTimers > 50) { // Seuil d'alerte
+      logger.warn('TimerManager', `⚠️ Nombre élevé de timers actifs: ${activeTimers}`);
+    }
+  }, 30000); // Vérification toutes les 30 secondes
+  
+  return () => clearInterval(watchdogInterval);
+};
+
 export default timerManager; 

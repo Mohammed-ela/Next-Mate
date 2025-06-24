@@ -3,18 +3,19 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { BlockingService, type BlockedUser } from '../../services/blockingService';
+import { notificationService } from '../../services/notificationService';
 
 interface SettingItem {
   id: string;
@@ -49,8 +50,6 @@ export default function ParametresScreen() {
       console.error('❌ Erreur chargement utilisateurs bloqués:', error);
     }
   };
-
-
 
   const handleDeleteAccount = () => {
     Alert.alert(
@@ -131,6 +130,38 @@ export default function ParametresScreen() {
     }
   };
 
+  const testLocalNotifications = async () => {
+    // Initialiser le service
+    await notificationService.initialize();
+    
+    if (!notificationService.isReady) {
+      alert('❌ Les notifications ne sont pas disponibles (permissions refusées ou émulateur)');
+      return;
+    }
+
+    // Test 1: Notification instantanée
+    await notificationService.showInstantNotification(
+      'Test NextMate ! 🎮',
+      'Les notifications locales fonctionnent parfaitement !',
+      { type: 'message', url: '/conversations' }
+    );
+
+    // Test 2: Notification programmée dans 5 secondes
+    await notificationService.scheduleLocalNotification(
+      'Test programmé 🕐',
+      'Cette notification était programmée il y a 5 secondes !',
+      { type: 'reminder' },
+      { seconds: 5 }
+    );
+
+    alert('✅ Notifications de test envoyées !\n\n1️⃣ Immédiate\n2️⃣ Dans 5 secondes');
+  };
+
+  const clearBadge = async () => {
+    await notificationService.clearBadge();
+    alert('🔕 Badge effacé');
+  };
+
   const appSettings: SettingItem[] = [
     {
       id: 'dark-mode',
@@ -193,7 +224,6 @@ export default function ParametresScreen() {
       type: 'navigation',
       onPress: () => Alert.alert('Avis', 'Merci pour votre feedback !'),
     },
-
   ];
 
   const dangerSettings: SettingItem[] = [
@@ -275,8 +305,6 @@ export default function ParametresScreen() {
     </View>
   );
 
-
-
   return (
     <View style={styles.container}>
       <StatusBar barStyle={isDarkMode ? "light-content" : "dark-content"} />
@@ -299,6 +327,28 @@ export default function ParametresScreen() {
           {renderSection('🆘 Support', supportSettings)}
           {renderSection('⚠️ Zone de danger', dangerSettings)}
           
+          {/* Section Test Notifications Locales */}
+          <View style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>🔔 Test Notifications Locales</Text>
+            <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
+              Compatible Expo Go - Pas besoin de development build !
+            </Text>
+            
+            <TouchableOpacity 
+              style={[styles.option, { backgroundColor: isDarkMode ? '#2D4A22' : '#E8F5E8' }]}
+              onPress={testLocalNotifications}
+            >
+              <Text style={[styles.optionText, { color: colors.text }]}>🧪 Tester les notifications</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.option, { backgroundColor: isDarkMode ? '#4A2D22' : '#F5E8E8' }]}
+              onPress={clearBadge}
+            >
+              <Text style={[styles.optionText, { color: colors.text }]}>🔕 Effacer le badge</Text>
+            </TouchableOpacity>
+          </View>
+          
           {/* Version */}
           <View style={styles.versionSection}>
             <Text style={[styles.versionText, { color: colors.textSecondary }]}>NextMate v1.0.0</Text>
@@ -306,8 +356,6 @@ export default function ParametresScreen() {
           </View>
         </ScrollView>
       </LinearGradient>
-
-
     </View>
   );
 }
@@ -451,5 +499,19 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontFamily: 'monospace',
   },
-
+  option: {
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  optionText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  sectionDescription: {
+    fontSize: 12,
+    marginBottom: 16,
+  },
 }); 

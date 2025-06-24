@@ -1,5 +1,5 @@
 import { doc, getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { db } from '../config/firebase';
 import { useAuth } from './AuthContext';
 
@@ -142,10 +142,16 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   // 🔄 Callbacks pour notifier les changements d'avatar
   const avatarChangeCallbacks = useRef<Set<() => void>>(new Set());
+  const timeoutRef = useRef<number | null>(null);
 
-  const notifyAvatarChange = () => {
-    // Appeler tous les callbacks enregistrés après un délai
-    setTimeout(() => {
+  const notifyAvatarChange = useCallback(() => {
+    // Nettoyer l'ancien timeout s'il existe
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
+
+    // Programmer les callbacks après un délai
+    timeoutRef.current = setTimeout(() => {
       avatarChangeCallbacks.current.forEach(callback => {
         try {
           callback();
@@ -153,13 +159,24 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
           console.error('Erreur callback avatar change:', error);
         }
       });
+      timeoutRef.current = null;
     }, 1000);
-  };
+  }, []); // ✅ Pas de dépendances car on utilise ref
 
-  const registerAvatarChangeCallback = (callback: () => void) => {
+  const registerAvatarChangeCallback = useCallback((callback: () => void) => {
     avatarChangeCallbacks.current.add(callback);
     return () => avatarChangeCallbacks.current.delete(callback);
-  };
+  }, []);
+
+  // 🧹 Nettoyage du timeout lors du démontage
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // 📖 Écouter les changements du profil en temps réel
   useEffect(() => {

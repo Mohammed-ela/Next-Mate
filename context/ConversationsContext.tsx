@@ -12,7 +12,7 @@ import {
   updateDoc,
   where
 } from 'firebase/firestore';
-import React, { createContext, ReactNode, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { db } from '../config/firebase';
 import { cleanObjectForFirestore, cleanParticipantData, safeTimestampToDate } from '../utils/firebaseHelpers';
 import logger from '../utils/logger';
@@ -208,51 +208,40 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
     }
   };
 
-  // 🔄 Mettre à jour les données des participants (avatars, etc.)
-  const refreshParticipantData = async (conversationId: string) => {
+  // 🔄 Refresh des données participant optimisé avec useCallback stable
+  const refreshParticipantData = useCallback(async (conversationId: string) => {
     if (!user?.uid) return;
 
     try {
-      logger.debug('Conversations', `🔄 Refresh participant data: ${conversationId}`);
+      logger.debug('Conversations', 'Refresh participant data pour', conversationId);
 
-      // Récupérer la conversation actuelle
+      // Récupérer les données de la conversation
       const conversationRef = doc(db, 'conversations', conversationId);
-      const conversationSnap = await getDoc(conversationRef);
+      const conversationDoc = await getDoc(conversationRef);
       
-      if (!conversationSnap.exists()) {
-        logger.warn('Conversations', `Conversation non trouvée: ${conversationId}`);
-        return;
-      }
-
-      const conversationData = conversationSnap.data();
-      const otherParticipantId = conversationData.participants.find((id: string) => id !== user.uid);
+      if (!conversationDoc.exists()) return;
       
-      if (!otherParticipantId) {
-        logger.warn('Conversations', 'Autre participant non trouvé');
-        return;
-      }
+      const data = conversationDoc.data();
+      const otherParticipantId = data.participants.find((id: string) => id !== user.uid);
+      
+      if (!otherParticipantId) return;
 
-      // Récupérer les données actuelles de l'utilisateur depuis Firestore
+      // Récupérer les données actuelles de l'utilisateur
       const userRef = doc(db, 'users', otherParticipantId);
-      const userSnap = await getDoc(userRef);
+      const userDoc = await getDoc(userRef);
       
-      if (!userSnap.exists()) {
-        logger.warn('Conversations', `Utilisateur non trouvé: ${otherParticipantId}`);
-        return;
-      }
-
-      const userData = userSnap.data();
+      if (!userDoc.exists()) return;
       
-      // Créer les nouvelles données participant synchronisées
-      const updatedParticipantData = {
-        name: userData.pseudo || userData.name || 'Joueur',
-        avatar: userData.profilePicture || userData.avatar || '🎮',
-        isImageAvatar: (userData.profilePicture || userData.avatar)?.startsWith('http') || false,
-        bio: userData.bio || '',
+      const userData = userDoc.data();
+      const updatedParticipantData = cleanParticipantData({
+        name: userData.pseudo || userData.displayName || 'Utilisateur',
+        avatar: userData.profilePicture,
+        isImageAvatar: !!userData.profilePicture,
+        bio: userData.bio,
         isOnline: userData.isOnline || false,
-        currentGame: userData.currentlyPlaying || (userData.games && userData.games.length > 0 ? userData.games[0].name : undefined),
+        currentGame: userData.currentlyPlaying,
         lastSeen: userData.lastSeen,
-      };
+      });
 
       // Mettre à jour dans Firestore
       await updateDoc(conversationRef, {
@@ -269,18 +258,21 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
     } catch (error) {
       logger.error('Conversations', 'Erreur refresh participant data', error);
     }
-  };
+  }, [user?.uid]); // ✅ Seule dépendance nécessaire
 
   const getConversationById = (id: string): Conversation | null => {
     return conversations.find(conv => conv.id === id) || null;
   };
 
-  const markAsRead = (conversationId: string) => {
+  const markAsRead = useCallback((conversationId: string) => {
     if (!user?.uid) return;
 
     logger.debug('Conversations', `Marquage lu: ${conversationId}`);
 
-    // Mettre à jour localement
+    // Éviter les mises à jour simultanées
+    const conversationRef = doc(db, 'conversations', conversationId);
+    
+    // Mise à jour optimiste locale PUIS Firestore
     setConversations(prev => {
       const updated = prev.map(conv => 
         conv.id === conversationId 
@@ -290,16 +282,24 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
       return updated;
     });
 
-    // Mettre à jour dans Firestore
-    const conversationRef = doc(db, 'conversations', conversationId);
+    // Mise à jour Firestore en arrière-plan
     setDoc(conversationRef, {
       [`unreadCounts.${user.uid}`]: 0
     }, { merge: true }).then(() => {
       logger.firebase('update', 'unread_count', 'success', { conversationId });
     }).catch(error => {
       logger.error('Conversations', 'Erreur mise à jour lecture', error);
+      // En cas d'erreur, remettre le compteur à jour localement
+      setConversations(prev => {
+        const updated = prev.map(conv => 
+          conv.id === conversationId 
+            ? { ...conv, unreadCount: conv.unreadCount > 0 ? conv.unreadCount : 1 }
+            : conv
+        );
+        return updated;
+      });
     });
-  };
+  }, [user?.uid]); // ✅ Ajout de useCallback avec dépendances
 
   const deleteConversation = async (conversationId: string) => {
     if (!user) return;
@@ -409,7 +409,7 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
   }, [user?.uid]);
 
   // 🔄 Fonction pour synchroniser tous les avatars des conversations (avec protection)
-  const syncAllParticipantData = async () => {
+  const syncAllParticipantData = useCallback(async () => {
     const now = Date.now();
     
     // 🛡️ Vérifier le délai minimum depuis la dernière sync
@@ -434,7 +434,7 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
     } catch (error) {
       logger.error('Conversations', 'Erreur synchronisation avatars', error);
     }
-  };
+  }, [user?.uid, conversations, refreshParticipantData]); // ✅ Toutes les dépendances nécessaires
 
   // 👂 S'enregistrer pour écouter les changements d'avatar
   useEffect(() => {
@@ -444,7 +444,7 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
     });
 
     return unregister;
-  }, [registerAvatarChangeCallback]);
+  }, [registerAvatarChangeCallback, syncAllParticipantData]);
 
   const value: ConversationsContextType = {
     conversations,
