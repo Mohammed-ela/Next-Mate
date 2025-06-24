@@ -3,15 +3,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  FlatList,
-  Image,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useConversations } from '../../context/ConversationsContext';
@@ -204,7 +204,17 @@ export default function Trouve1MateScreen() {
           <View style={styles.mateInfo}>
             <View style={styles.nameRow}>
               <Text style={[styles.mateName, { color: colors.text }]}>{item.name}</Text>
-              {item.preferences?.ageRange && <Text style={[styles.mateAge, { color: colors.textSecondary }]}>{item.preferences.ageRange} ans</Text>}
+              <View style={styles.userInfoRow}>
+                {item.preferences?.ageRange && <Text style={[styles.mateAge, { color: colors.textSecondary }]}>{item.preferences.ageRange} ans</Text>}
+                {/* Affichage du sexe avec emoji */}
+                {item.preferences?.gender && (
+                  <Text style={[styles.genderInfo, { color: colors.textSecondary }]}>
+                    {item.preferences.gender === 'Homme' ? '♂️' : 
+                     item.preferences.gender === 'Femme' ? '♀️' : 
+                     item.preferences.gender === 'Autre' ? '⚧️' : ''}
+                  </Text>
+                )}
+              </View>
             </View>
             {item.preferences?.location && (
               <Text style={[styles.mateDistance, { color: colors.textSecondary }]}>📍 {item.preferences.location}</Text>
@@ -530,8 +540,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  userInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   mateAge: {
     fontSize: 14,
+  },
+  genderInfo: {
+    fontSize: 16,
   },
   mateDistance: {
     fontSize: 14,

@@ -228,7 +228,7 @@ function ModernMessageBubble({ message, isMyMessage, participant, onPress }: {
         <Animated.View style={[
           styles.gameInviteBubble,
           { 
-            backgroundColor: isMyMessage ? colors.primary : colors.card,
+            backgroundColor: isMyMessage ? colors.primary : '#FF8E53',
             transform: [{ scale: scaleAnim }]
           }
         ]}>
@@ -237,18 +237,18 @@ function ModernMessageBubble({ message, isMyMessage, participant, onPress }: {
               <Ionicons 
                 name="game-controller" 
                 size={24} 
-                color={isMyMessage ? '#FFFFFF' : colors.primary} 
+                color={isMyMessage ? '#FFFFFF' : '#FFFFFF'} 
               />
               <View style={styles.gameInviteText}>
                 <Text style={[
                   styles.gameInviteTitle,
-                  { color: isMyMessage ? '#FFFFFF' : colors.text }
+                  { color: isMyMessage ? '#FFFFFF' : '#FFFFFF' }
                 ]}>
                   {message.gameInvite?.gameName}
                 </Text>
                 <Text style={[
                   styles.gameInviteMessage,
-                  { color: isMyMessage ? '#FFFFFF90' : colors.textSecondary }
+                  { color: isMyMessage ? '#FFFFFF90' : '#FFFFFF90' }
                 ]}>
                   {message.gameInvite?.message}
                 </Text>
@@ -256,7 +256,7 @@ function ModernMessageBubble({ message, isMyMessage, participant, onPress }: {
               <Ionicons 
                 name="chevron-forward" 
                 size={20} 
-                color={isMyMessage ? '#FFFFFF' : colors.textSecondary} 
+                color={isMyMessage ? '#FFFFFF' : '#FFFFFF90'} 
               />
             </View>
           </TouchableOpacity>
@@ -296,7 +296,7 @@ function ModernMessageBubble({ message, isMyMessage, participant, onPress }: {
       <Animated.View style={[
         styles.messageBubble,
         {
-          backgroundColor: isMyMessage ? colors.primary : colors.card,
+          backgroundColor: isMyMessage ? colors.primary : '#FF8E53',
           transform: [{ scale: scaleAnim }]
         },
         isMyMessage && styles.myMessageBubble
@@ -304,7 +304,7 @@ function ModernMessageBubble({ message, isMyMessage, participant, onPress }: {
         <TouchableOpacity onPress={handlePress} activeOpacity={0.8}>
           <Text style={[
             styles.messageText,
-            { color: isMyMessage ? '#FFFFFF' : colors.text }
+            { color: isMyMessage ? '#FFFFFF' : '#FFFFFF' }
           ]}>
             {message.content}
           </Text>

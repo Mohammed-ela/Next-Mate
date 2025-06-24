@@ -39,6 +39,7 @@ export interface UserProfile {
     bio?: string;
     ageRange?: string;
     location?: string;
+    gender?: 'Homme' | 'Femme' | 'Autre';
   };
   stats: {
     totalMatches: number;
@@ -81,6 +82,7 @@ export class UserService {
           bio: '',
           ageRange: '18-25',
           location: 'France',
+          gender: 'Autre',
         },
         stats: {
           totalMatches: 0,
@@ -162,6 +164,7 @@ export class UserService {
           bio: data.bio || data.preferences?.bio,
           ageRange: data.age ? `${data.age}` : data.preferences?.ageRange,
           location: data.location || data.preferences?.location,
+          gender: data.gender || data.preferences?.gender,
         },
         stats: {
           totalMatches: data.stats?.totalMatches || 0,
@@ -246,6 +249,7 @@ export class UserService {
                 bio: data.bio || data.preferences?.bio,
                 ageRange: data.age ? `${data.age}` : data.preferences?.ageRange,
                 location: data.location || data.preferences?.location,
+                gender: data.gender || data.preferences?.gender,
               },
               stats: {
                 totalMatches: data.stats?.totalMatches || 0,
