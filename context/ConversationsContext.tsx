@@ -444,7 +444,7 @@ export const ConversationsProvider: React.FC<{ children: ReactNode }> = ({ child
     });
 
     return unregister;
-  }, [registerAvatarChangeCallback, syncAllParticipantData]);
+  }, [registerAvatarChangeCallback]);
 
   const value: ConversationsContextType = {
     conversations,
