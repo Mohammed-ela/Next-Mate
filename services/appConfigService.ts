@@ -428,7 +428,7 @@ export class AppConfigService {
   // 🏆 Récupérer les rangs par jeu avec cache
   static async getGameRanks(): Promise<{ [gameId: string]: GameRank[] }> {
     const fallbackRanks = {
-      valorant: [
+      'Valorant': [
         { id: 'iron', name: 'Fer', color: '#8B4513', order: 1 },
         { id: 'bronze', name: 'Bronze', color: '#CD7F32', order: 2 },
         { id: 'silver', name: 'Argent', color: '#C0C0C0', order: 3 },
@@ -438,7 +438,7 @@ export class AppConfigService {
         { id: 'immortal', name: 'Immortel', color: '#FF4654', order: 7 },
         { id: 'radiant', name: 'Radiant', color: '#FFFF99', order: 8 }
       ],
-      lol: [
+      'League of Legends': [
         { id: 'iron', name: 'Fer', color: '#8B4513', order: 1 },
         { id: 'bronze', name: 'Bronze', color: '#CD7F32', order: 2 },
         { id: 'silver', name: 'Argent', color: '#C0C0C0', order: 3 },
@@ -448,20 +448,58 @@ export class AppConfigService {
         { id: 'master', name: 'Maître', color: '#9932CC', order: 7 },
         { id: 'grandmaster', name: 'Grand Maître', color: '#FF4500', order: 8 },
         { id: 'challenger', name: 'Challenger', color: '#FFD700', order: 9 }
+      ],
+      'Default': [
+        { id: 'beginner', name: 'Débutant', color: '#8B4513', order: 1 },
+        { id: 'novice', name: 'Novice', color: '#CD7F32', order: 2 },
+        { id: 'intermediate', name: 'Intermédiaire', color: '#C0C0C0', order: 3 },
+        { id: 'advanced', name: 'Avancé', color: '#FFD700', order: 4 },
+        { id: 'expert', name: 'Expert', color: '#E5E4E2', order: 5 }
       ]
     };
 
     return cache.getWithCache(
       'gameRanks',
       async () => {
-        const ranksDoc = doc(db, 'app_config', 'game_ranks');
-        const snapshot = await getDoc(ranksDoc);
-        
-        if (!snapshot.exists()) {
-          throw new Error('Rangs non trouvés');
-        }
+        try {
+          console.log('🎯 Récupération rangs depuis Firebase...');
+          const ranksDoc = doc(db, 'app_config', 'game_ranks');
+          const snapshot = await getDoc(ranksDoc);
+          
+          if (!snapshot.exists()) {
+            console.warn('⚠️ Document game_ranks non trouvé, utilisation fallback');
+            return fallbackRanks;
+          }
 
-        return snapshot.data() as { [gameId: string]: GameRank[] };
+          const data = snapshot.data();
+          console.log('📊 Données rangs récupérées:', data);
+          
+          // Traiter les données - structure: { ranks: { "Valorant": ["Fer", "Bronze", ...], ... } }
+          if (data.ranks) {
+            const processedRanks: { [gameId: string]: GameRank[] } = {};
+            
+            for (const [gameName, ranks] of Object.entries(data.ranks)) {
+              if (Array.isArray(ranks)) {
+                processedRanks[gameName] = (ranks as string[]).map((rank, index) => ({
+                  id: `${gameName.toLowerCase()}_${rank.toLowerCase()}`,
+                  name: rank,
+                  color: '#FF8E53',
+                  order: index
+                }));
+              }
+            }
+            
+            console.log('✅ Rangs traités:', Object.keys(processedRanks));
+            return processedRanks;
+          }
+          
+          console.warn('⚠️ Structure rangs inattendue, utilisation fallback');
+          return fallbackRanks;
+          
+        } catch (error) {
+          console.error('❌ Erreur récupération rangs:', error);
+          return fallbackRanks;
+        }
       },
       fallbackRanks
     );
@@ -472,26 +510,48 @@ export class AppConfigService {
     const fallbackStyles: GameStyle[] = [
       { id: 'chill', name: 'Chill', description: 'Détendu et fun', icon: '😎', color: '#4CAF50' },
       { id: 'tryhard', name: 'Tryhard', description: 'Compétitif et sérieux', icon: '🔥', color: '#FF5722' },
-      { id: 'social', name: 'Social', description: 'Bavard et convivial', icon: '💬', color: '#2196F3' },
-      { id: 'mentor', name: 'Mentor', description: 'Aide les débutants', icon: '🎓', color: '#9C27B0' },
-      { id: 'leader', name: 'Leader', description: 'Prend les initiatives', icon: '👑', color: '#FF9800' }
+      { id: 'competitive', name: 'Competitive', description: 'Esprit compétitif', icon: '🏆', color: '#FF8E53' },
+      { id: 'fun', name: 'Fun', description: 'Pour le plaisir', icon: '🎉', color: '#2196F3' },
+      { id: 'improve', name: 'Improve', description: 'Amélioration continue', icon: '📈', color: '#9C27B0' }
     ];
 
     return cache.getWithCache(
       'gameStyles',
       async () => {
-        const stylesDoc = doc(db, 'app_config', 'game_styles');
-        const snapshot = await getDoc(stylesDoc);
-        
-        if (!snapshot.exists()) {
-          throw new Error('Styles non trouvés');
-        }
+        try {
+          console.log('🎨 Récupération styles depuis Firebase...');
+          const stylesDoc = doc(db, 'app_config', 'game_styles');
+          const snapshot = await getDoc(stylesDoc);
+          
+          if (!snapshot.exists()) {
+            console.warn('⚠️ Document game_styles non trouvé, utilisation fallback');
+            return fallbackStyles;
+          }
 
-        const data = snapshot.data();
-        return Object.entries(data).map(([id, style]: [string, any]) => ({
-          id,
-          ...style
-        } as GameStyle));
+          const data = snapshot.data();
+          console.log('📊 Données styles récupérées:', data);
+          
+          // Traiter les données - structure: { styles: ["Chill", "Tryhard", ...] }
+          if (data.styles && Array.isArray(data.styles)) {
+            const processedStyles: GameStyle[] = data.styles.map((styleName: string, index: number) => ({
+              id: styleName.toLowerCase(),
+              name: styleName,
+              description: `Style de jeu: ${styleName}`,
+              icon: '🎮',
+              color: '#FF8E53'
+            }));
+            
+            console.log('✅ Styles traités:', processedStyles.map(s => s.name));
+            return processedStyles;
+          }
+          
+          console.warn('⚠️ Structure styles inattendue, utilisation fallback');
+          return fallbackStyles;
+          
+        } catch (error) {
+          console.error('❌ Erreur récupération styles:', error);
+          return fallbackStyles;
+        }
       },
       fallbackStyles
     );

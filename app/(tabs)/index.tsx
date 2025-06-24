@@ -230,6 +230,9 @@ export default function HomeScreen() {
 
   // Nouvelle fonction pour éditer un jeu
   const editGame = (game: any) => {
+    console.log('🎮 Édition jeu:', game);
+    console.log('📊 GameRanks disponibles:', gameRanks);
+    console.log('🎨 GameStyles disponibles:', gameStyles);
     setSelectedGame(game);
     setSelectedRank(game.rank || '');
     setSelectedStyle(game.goals || []);
@@ -791,21 +794,21 @@ export default function HomeScreen() {
                     showsHorizontalScrollIndicator={false}
                     style={styles.simpleRankScroll}
                   >
-                    {(gameRanks[selectedGame?.id || ''] || []).map((rank: any) => (
+                    {(gameRanks[selectedGame?.name || ''] || gameRanks['Default'] || []).map((rank: any) => (
                       <TouchableOpacity
-                        key={rank}
+                        key={typeof rank === 'string' ? rank : rank.name || rank.id}
                         style={[
                           styles.simpleRankButton,
-                          selectedRank === rank && styles.simpleRankButtonSelected
+                          selectedRank === (typeof rank === 'string' ? rank : rank.name || rank.id) && styles.simpleRankButtonSelected
                         ]}
-                        onPress={() => setSelectedRank(rank)}
+                        onPress={() => setSelectedRank(typeof rank === 'string' ? rank : rank.name || rank.id)}
                       >
                         <Text style={[
                           styles.simpleRankText,
-                          { color: selectedRank === rank ? '#FFFFFF' : colors.textSecondary },
-                          selectedRank === rank && styles.simpleRankTextSelected
+                          { color: selectedRank === (typeof rank === 'string' ? rank : rank.name || rank.id) ? '#FFFFFF' : colors.textSecondary },
+                          selectedRank === (typeof rank === 'string' ? rank : rank.name || rank.id) && styles.simpleRankTextSelected
                         ]}>
-                          {rank}
+                          {typeof rank === 'string' ? rank : rank.name || rank.id}
                         </Text>
                       </TouchableOpacity>
                     ))}
@@ -818,24 +821,29 @@ export default function HomeScreen() {
                   <Text style={[styles.simpleSectionSubtitle, { color: colors.textSecondary }]}>Comment tu aimes jouer ? (plusieurs choix possible)</Text>
                   
                   <View style={styles.simpleStyleGrid}>
-                                          {gameStyles.map((style) => (
+                    {gameStyles.map((style) => {
+                      const styleName = typeof style === 'string' ? style : style.name || style.id;
+                      const styleKey = typeof style === 'string' ? style : style.id || style.name;
+                      
+                      return (
                         <TouchableOpacity
-                          key={style.id}
+                          key={styleKey}
                           style={[
                             styles.simpleStyleButton,
-                            selectedStyle.includes(style.name) && styles.simpleStyleButtonSelected
+                            selectedStyle.includes(styleName) && styles.simpleStyleButtonSelected
                           ]}
-                          onPress={() => toggleStyle(style.name)}
+                          onPress={() => toggleStyle(styleName)}
                         >
                           <Text style={[
                             styles.simpleStyleText,
-                            { color: selectedStyle.includes(style.name) ? '#FFFFFF' : colors.textSecondary },
-                            selectedStyle.includes(style.name) && styles.simpleStyleTextSelected
+                            { color: selectedStyle.includes(styleName) ? '#FFFFFF' : colors.textSecondary },
+                            selectedStyle.includes(styleName) && styles.simpleStyleTextSelected
                           ]}>
-                            {style.name}
+                            {styleName}
                           </Text>
                         </TouchableOpacity>
-                      ))}
+                      );
+                    })}
                   </View>
                 </View>
 
