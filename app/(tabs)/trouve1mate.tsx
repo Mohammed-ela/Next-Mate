@@ -208,11 +208,13 @@ export default function Trouve1MateScreen() {
                 {item.preferences?.ageRange && <Text style={[styles.mateAge, { color: colors.textSecondary }]}>{item.preferences.ageRange} ans</Text>}
                 {/* Affichage du sexe avec emoji */}
                 {item.preferences?.gender && (
-                  <Text style={[styles.genderInfo, { color: colors.textSecondary }]}>
-                    {item.preferences.gender === 'Homme' ? '♂️' : 
-                     item.preferences.gender === 'Femme' ? '♀️' : 
-                     item.preferences.gender === 'Autre' ? '⚧️' : ''}
-                  </Text>
+                  <View style={[styles.genderBadge, { backgroundColor: colors.surface }]}>
+                    <Text style={[styles.genderText, { color: colors.text }]}>
+                      {item.preferences.gender === 'Homme' ? '👨' : 
+                       item.preferences.gender === 'Femme' ? '👩' : 
+                       item.preferences.gender === 'Autre' ? '🧑' : '👤'}
+                    </Text>
+                  </View>
                 )}
               </View>
             </View>
@@ -550,6 +552,16 @@ const styles = StyleSheet.create({
   },
   genderInfo: {
     fontSize: 16,
+  },
+  genderBadge: {
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  genderText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   mateDistance: {
     fontSize: 14,
