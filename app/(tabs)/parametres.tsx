@@ -157,14 +157,14 @@ export default function ParametresScreen() {
       title: 'Politique de confidentialité',
       icon: 'document-text',
       type: 'navigation',
-      onPress: () => Alert.alert('Confidentialité', 'Politique de confidentialité'),
+      onPress: () => router.push('/privacy-policy'),
     },
     {
       id: 'terms',
       title: 'Conditions d\'utilisation',
       icon: 'clipboard',
       type: 'navigation',
-      onPress: () => Alert.alert('CGU', 'Conditions générales d\'utilisation'),
+      onPress: () => router.push('/terms-of-service'),
     },
   ];
 
@@ -175,7 +175,7 @@ export default function ParametresScreen() {
       subtitle: 'FAQ et tutoriels',
       icon: 'help-circle',
       type: 'navigation',
-      onPress: () => Alert.alert('Aide', 'Centre d\'aide NextMate'),
+      onPress: () => router.push('/help-center'),
     },
     {
       id: 'contact',
@@ -183,7 +183,7 @@ export default function ParametresScreen() {
       subtitle: 'support@nextmate.app',
       icon: 'mail',
       type: 'navigation',
-      onPress: () => Alert.alert('Contact', 'support@nextmate.app'),
+      onPress: () => router.push('/contact-support'),
     },
     {
       id: 'feedback',
@@ -191,7 +191,7 @@ export default function ParametresScreen() {
       subtitle: 'Améliorer NextMate',
       icon: 'star',
       type: 'navigation',
-      onPress: () => Alert.alert('Avis', 'Merci pour votre feedback !'),
+      onPress: () => router.push('/feedback'),
     },
   ];
 

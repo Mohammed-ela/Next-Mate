@@ -86,6 +86,13 @@ export default function HomeScreen() {
     }
   }, [isEditingBio, profile?.bio]);
 
+  // Fonction pour commencer l'édition de la bio
+  const startEditingBio = () => {
+    // S'assurer que bioText contient la bio actuelle avant d'ouvrir l'édition
+    setBioText(profile?.bio || '');
+    setIsEditingBio(true);
+  };
+
   const handleSignOut = async () => {
     await logout();
     // La redirection se fera automatiquement via _layout.tsx
@@ -780,16 +787,21 @@ export default function HomeScreen() {
                 ) : (
                   <TouchableOpacity 
                     style={styles.bioDisplay}
-                    onPress={() => setIsEditingBio(true)}
+                    onPress={() => {
+                      setBioText(profile?.bio || '');
+                      setIsEditingBio(true);
+                    }}
                   >
                     {profile.bio ? (
-                      <Text style={[styles.bioText, { 
-                        color: colors.text,
-                        backgroundColor: colors.surface 
-                      }]}>
-                        "{profile.bio.length > 150 
-                          ? `${profile.bio.substring(0, 150)}...` 
-                          : profile.bio}"
+                      <Text 
+                        style={[styles.bioText, { 
+                          color: colors.text,
+                          backgroundColor: colors.surface 
+                        }]}
+                        numberOfLines={4}
+                        ellipsizeMode="tail"
+                      >
+                        "{profile.bio.replace(/\n+/g, ' ').trim()}"
                       </Text>
                     ) : (
                       <Text style={[styles.bioPlaceholder, { 
@@ -1767,6 +1779,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderLeftWidth: 3,
     borderLeftColor: '#FF8E53',
+    maxHeight: 90,
+    overflow: 'hidden',
   },
   bioPlaceholder: {
     fontSize: 15,
