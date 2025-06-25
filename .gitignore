@@ -44,3 +44,17 @@ firestore.rules
 /scripts/
 package-lock.json
 /.vscode/
+firebase.json
+firebase-debug.log
+firebase-export-debug.log
+firebase-debug.*
+firebase-export-debug.*
+firebase.rules
+firebase.rules.json
+firebase.rules.json.gz
+firebase.rules.json.gz.part
+firebase.rules.json.gz.part.1
+firebase.rules.json.gz.part.2
+firebase.rules.json.gz.part.3
+firebase.rules.json.gz.part.4
+firebase.rules.json.gz.part.5
