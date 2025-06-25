@@ -42,3 +42,5 @@ app-example
 /.cursor/
 firestore.rules
 /scripts/
+package-lock.json
+/.vscode/
