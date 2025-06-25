@@ -4,18 +4,18 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  FlatList,
-  Image,
-  Modal,
-  Platform,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    FlatList,
+    Image,
+    Modal,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from "react-native";
 // Removed invalid import - Game type defined locally
 import { useAppConfig } from '../../context/AppConfigContext';
@@ -540,7 +540,7 @@ export default function HomeScreen() {
 
   // Fonction pour contacter le support
   const handleContactSupport = () => {
-    const supportUrl = "https://www.nextmate.gg/support/date_de_naissance/";
+    const supportUrl = process.env.EXPO_PUBLIC_SUPPORT_URL || "https://www.nextmate.gg/support/date_de_naissance/";
     console.log(`🔗 Redirection vers: ${supportUrl}`);
     // En production, utiliser Linking.openURL(supportUrl)
     setShowContactSupportModal(false);

@@ -21,8 +21,8 @@ export default function FeedbackScreen() {
   const [selectedRating, setSelectedRating] = useState(0);
 
   const openPlayStore = async () => {
-    const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.nextmate.app';
-    const appStoreUrl = 'https://apps.apple.com/app/nextmate/id123456789';
+      const playStoreUrl = process.env.EXPO_PUBLIC_PLAY_STORE_URL || 'https://play.google.com/store/apps/details?id=com.nextmate.app';
+  const appStoreUrl = process.env.EXPO_PUBLIC_APP_STORE_URL || 'https://apps.apple.com/app/nextmate/id123456789';
     
     try {
       // Détecter la plateforme et ouvrir le bon store

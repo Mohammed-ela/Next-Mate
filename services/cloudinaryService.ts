@@ -1,3 +1,5 @@
+import { CLOUDINARY_CONFIG } from '../constants/Environment';
+
 // 🌤️ Service Cloudinary pour React Native/Expo avec API REST
 export interface CloudinaryUploadResult {
   success: boolean;
@@ -7,8 +9,8 @@ export interface CloudinaryUploadResult {
 }
 
 // Configuration Cloudinary (UNSIGNED seulement)
-const CLOUD_NAME = 'dne82oczq';
-const UPLOAD_PRESET = 'nextmate_preset';
+const CLOUD_NAME = CLOUDINARY_CONFIG.cloudName;
+const UPLOAD_PRESET = CLOUDINARY_CONFIG.uploadPreset;
 
 export class CloudinaryService {
   /**

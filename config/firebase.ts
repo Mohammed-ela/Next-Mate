@@ -2,17 +2,10 @@ import { getApps, initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { enableNetwork, getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { FIREBASE_CONFIG } from "../constants/Environment";
 
 // 🔧 Configuration Firebase de votre projet NextMate
-const firebaseConfig = {
-  apiKey: "AIzaSyDfvbCCTJ83RxMLxRZWGEZ2nvfjvwB2aJs",
-  authDomain: "nextmate-96970.firebaseapp.com",
-  projectId: "nextmate-96970",
-  storageBucket: "nextmate-96970.firebasestorage.app",
-  messagingSenderId: "878821081605",
-  appId: "1:878821081605:web:d245a75dd55d6948d9526c",
-  measurementId: "G-QY7M7L8F6F"
-};
+const firebaseConfig = FIREBASE_CONFIG;
 
 // 🚀 Initialisation Firebase (évite la double initialisation)
 let app;
