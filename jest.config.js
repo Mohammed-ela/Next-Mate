@@ -1,0 +1,46 @@
+module.exports = {
+  testEnvironment: 'node',
+  // setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
+  moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
+  testMatch: [
+    '**/__tests__/**/*.(test|spec).(js|jsx|ts|tsx)',
+    '**/*.(test|spec).(js|jsx|ts|tsx)',
+  ],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/android/',
+    '/ios/',
+  ],
+  collectCoverageFrom: [
+    'app/**/*.{js,jsx,ts,tsx}',
+    'components/**/*.{js,jsx,ts,tsx}',
+    'services/**/*.{js,jsx,ts,tsx}',
+    'context/**/*.{js,jsx,ts,tsx}',
+    'hooks/**/*.{js,jsx,ts,tsx}',
+    'utils/**/*.{js,jsx,ts,tsx}',
+    '!**/*.d.ts',
+    '!**/node_modules/**',
+    '!**/coverage/**',
+  ],
+  coverageThreshold: {
+    global: {
+      branches: 30,
+      functions: 30,
+      lines: 30,
+      statements: 30,
+    },
+  },
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/$1',
+    '^@components/(.*)$': '<rootDir>/components/$1',
+    '^@services/(.*)$': '<rootDir>/services/$1',
+    '^@context/(.*)$': '<rootDir>/context/$1',
+    '^@hooks/(.*)$': '<rootDir>/hooks/$1',
+    '^@utils/(.*)$': '<rootDir>/utils/$1',
+    '^@constants/(.*)$': '<rootDir>/constants/$1',
+  },
+  verbose: true,
+  clearMocks: true,
+  resetMocks: true,
+  restoreMocks: true,
+}; 
