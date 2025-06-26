@@ -3,14 +3,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-  Alert,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Switch,
-  Text,
-  TouchableOpacity,
-  View
+    Alert,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Switch,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
@@ -129,8 +129,6 @@ export default function ParametresScreen() {
     }
   };
 
-
-
   const appSettings: SettingItem[] = [
     {
       id: 'dark-mode',
@@ -198,11 +196,11 @@ export default function ParametresScreen() {
   const dangerSettings: SettingItem[] = [
     {
       id: 'delete-account',
-      title: isDeletingAccount ? 'Suppression...' : 'Supprimer le compte',
-      subtitle: isDeletingAccount ? 'Suppression en cours...' : 'Action irréversible',
-      icon: isDeletingAccount ? 'hourglass' : 'trash',
+      title: 'Supprimer mon compte',
+      subtitle: 'Action irréversible',
+      icon: 'trash',
       type: 'danger',
-      onPress: isDeletingAccount ? undefined : handleDeleteAccount,
+      onPress: handleDeleteAccount,
     },
   ];
 
@@ -446,5 +444,4 @@ const styles = StyleSheet.create({
     marginTop: 8,
     fontFamily: 'monospace',
   },
-
 }); 
