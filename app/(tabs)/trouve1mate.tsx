@@ -1,67 +1,46 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import React from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Dimensions,
-  FlatList,
-  Image,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Dimensions,
+    FlatList,
+    Image,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useConversations } from '../../context/ConversationsContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useUserProfile } from '../../context/UserProfileContext';
-import UserService, { type UserProfile } from '../../services/userService';
+import { useRealtimeDiscovery } from '../../hooks/useRealtimeDiscovery';
+import { type UserProfile } from '../../services/userService';
 
 const { width } = Dimensions.get('window');
 
 export default function Trouve1MateScreen() {
-  const [users, setUsers] = useState<UserProfile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const { colors, isDarkMode } = useTheme();
   const { createConversation } = useConversations();
   const { user: currentUser } = useAuth();
   const { profile } = useUserProfile();
 
-  const loadUsers = useCallback(async (isRefresh = false) => {
-    try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-
-      const discoveryUsers = await UserService.getDiscoveryUsers(currentUser?.uid || '');
-      setUsers(discoveryUsers);
-    } catch (error) {
-      console.error('❌ Erreur chargement utilisateurs:', error);
-      Alert.alert(
-        '😕 Erreur',
-        'Impossible de charger les profils. Vérifiez votre connexion.'
-      );
-    } finally {
-      if (isRefresh) {
-        setRefreshing(false);
-      } else {
-        setLoading(false);
-      }
-    }
-  }, [currentUser?.uid]);
-
-  useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
+  // 🚀 Utilisation du nouveau hook avec mise à jour temps réel
+  const { 
+    users, 
+    loading, 
+    refreshing, 
+    error, 
+    refresh, 
+    forceRefresh 
+  } = useRealtimeDiscovery({
+    enableRealtime: true, // Active la mise à jour temps réel
+    refreshInterval: 3 * 60 * 1000 // Refresh automatique toutes les 3 minutes
+  });
 
   const openProfile = (userId: string) => {
     // Navigation vers la page de profil avec l'ID utilisateur
@@ -303,7 +282,7 @@ export default function Trouve1MateScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => loadUsers(true)}
+            onRefresh={refresh}
             colors={['#FF8E53']}
             tintColor="#FF8E53"
           />

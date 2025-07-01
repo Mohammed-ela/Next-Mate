@@ -17,12 +17,13 @@ import { BlockingService } from './blockingService';
 
 // Configuration optimisée - PERFORMANCE AMÉLIORÉE
 const PERFORMANCE_CONFIG = {
-  CACHE_DURATION: 15 * 60 * 1000, // 15 minutes (au lieu de 3)
+  CACHE_DURATION: 3 * 60 * 1000, // Réduit à 3 minutes (au lieu de 15)
   BATCH_SIZE: 15, // Taille optimale des batches
   MAX_RETRIES: 1, // Réduit de 2 à 1
   RETRY_DELAY: 1000, // 1 seconde (au lieu de 500ms)
   DISCOVERY_LIMIT: 20, // Limite des utilisateurs découverte
   POPULAR_GAMES_CACHE: 10 * 60 * 1000, // 10 minutes (au lieu de 2)
+  DISCOVERY_CACHE_DURATION: 2 * 60 * 1000, // Cache découverte plus court: 2 minutes
 };
 
 // Types optimisés
@@ -206,7 +207,7 @@ export class UserService {
       
       // Vérifier le cache d'abord
       const cacheKey = `discovery_${currentUserId}_${JSON.stringify(filters)}`;
-      const cached = cacheManager.get<UserProfile[]>('discovery', cacheKey, PERFORMANCE_CONFIG.CACHE_DURATION);
+      const cached = cacheManager.get<UserProfile[]>('discovery', cacheKey, PERFORMANCE_CONFIG.DISCOVERY_CACHE_DURATION);
       if (cached) {
         logger.cache('hit', `discovery:${cacheKey}`);
         return cached;
@@ -341,9 +342,8 @@ export class UserService {
         updatedAt: new Date(),
       });
 
-      // Invalider le cache
-      cacheManager.invalidateKey('userProfiles', `profile_${uid}`);
-      cacheManager.invalidateCache('discovery'); // Invalider aussi discovery
+      // Invalider TOUS les caches liés aux profils
+      this.invalidateAllProfileCaches(uid);
 
       logger.firebase('update', 'user_preferences', 'success', { uid });
     } catch (error) {
@@ -422,6 +422,29 @@ export class UserService {
     cacheManager.invalidateCache('discovery');
     this.lastCacheInvalidation = Date.now();
     logger.info('UserService', 'Cache découverte invalidé');
+  }
+
+  // 💥 Invalider tous les caches liés à un profil utilisateur
+  static invalidateAllProfileCaches(uid: string): void {
+    // 1. Invalider le cache du profil spécifique
+    cacheManager.invalidateKey('userProfiles', `profile_${uid}`);
+    
+    // 2. Invalider TOUT le cache discovery (car ce profil peut apparaître dans les résultats d'autres utilisateurs)
+    cacheManager.invalidateCache('discovery');
+    
+    // 3. Mettre à jour le timestamp d'invalidation
+    this.lastCacheInvalidation = Date.now();
+    
+    logger.info('UserService', `Cache invalidé pour l'utilisateur ${uid} + discovery globale`);
+  }
+
+  // 🚀 Forcer le refresh des données discovery (pour les écrans qui en ont besoin)
+  static async forceRefreshDiscovery(currentUserId: string): Promise<UserProfile[]> {
+    // Vider complètement le cache discovery
+    cacheManager.invalidateCache('discovery');
+    
+    // Recharger immédiatement
+    return this.getDiscoveryUsers(currentUserId);
   }
 }
 

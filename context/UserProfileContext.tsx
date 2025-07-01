@@ -1,6 +1,7 @@
 import { doc, getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { db } from '../config/firebase';
+import UserService from '../services/userService';
 import { useAuth } from './AuthContext';
 
 // 🎮 Types pour le profil NextMate Gaming
@@ -289,6 +290,9 @@ export const UserProfileProvider: React.FC<{ children: React.ReactNode }> = ({ c
       });
 
       console.log('✅ Profil mis à jour:', Object.keys(updates));
+
+      // 💥 NOUVEAU: Invalider les caches après mise à jour du profil
+      UserService.invalidateAllProfileCaches(user.uid);
 
       // 🔄 Si l'avatar a changé, déclencher la synchronisation des conversations
       if (updates.profilePicture !== undefined) {

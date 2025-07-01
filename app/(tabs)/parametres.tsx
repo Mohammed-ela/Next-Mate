@@ -12,6 +12,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
+import { ProfileTestComponent } from '../../components/ProfileTestComponent';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { BlockingService, type BlockedUser } from '../../services/blockingService';
@@ -289,6 +290,9 @@ export default function ParametresScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
+          {/* 🧪 TEMPORAIRE: Composant de test pour la synchronisation */}
+          <ProfileTestComponent />
+          
           {renderSection('⚙️ Application', appSettings)}
           {renderSection('🔒 Confidentialité', privacySettings)}
           {renderSection('🆘 Support', supportSettings)}
