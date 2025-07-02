@@ -3,19 +3,19 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  Animated,
-  Dimensions,
-  FlatList,
-  Image,
-  Modal,
-  RefreshControl,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    Animated,
+    Dimensions,
+    FlatList,
+    Image,
+    Modal,
+    RefreshControl,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import InteractiveBadge from '../../components/InteractiveBadge';
@@ -24,6 +24,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useConversations, type Conversation } from '../../context/ConversationsContext';
 import { useBadgeNotifications } from '../../context/NotificationContext';
 import { useTheme } from '../../context/ThemeContext';
+import UserService from '../../services/userService';
 
 // Configuration ultra-optimisée
 const PERFORMANCE_CONFIG = {
@@ -107,18 +108,25 @@ export default function ConversationsScreen() {
     });
   }, [conversations, searchQuery]);
 
-  // 🔄 Pull-to-refresh optimisé
+  // 🔄 Pull-to-refresh optimisé avec vraie synchronisation
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      // Simuler refresh - les données sont déjà synchronisées via Firebase
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('🔄 Refresh conversations - Synchronisation des profils participants...');
+      
+      // 1. Invalider le cache des profils utilisateurs
+      UserService.clearCache();
+      
+      // 2. Synchroniser toutes les données des participants dans les conversations
+      await syncAllParticipantData();
+      
+      console.log('✅ Refresh conversations terminé - Profils participants synchronisés');
     } catch (error) {
-      console.error('Erreur refresh conversations:', error);
+      console.error('❌ Erreur refresh conversations:', error);
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [syncAllParticipantData]);
 
   // 🗑️ Suppression optimisée avec animation
   const handleDeleteConversation = useCallback(async (conversationId: string) => {

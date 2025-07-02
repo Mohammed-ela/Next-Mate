@@ -359,12 +359,20 @@ function ChatContent() {
     setLastMarkTime(now);
   }, [conversationId, isActive, conversation?.unreadCount, markAsRead, clearBadge, lastMarkTime]);
 
-  // 🔍 Détection focus avec vibration
+  // 🔍 Détection focus avec vibration + synchronisation participant
   useFocusEffect(
     useCallback(() => {
       setIsActive(true);
       Vibration.vibrate(CHAT_CONFIG.VIBRATION_DURATION);
       markConversationAsRead();
+      
+      // 🔄 Synchroniser les données du participant à l'ouverture du chat
+      if (conversationId) {
+        console.log('🔄 Synchronisation données participant à l\'ouverture du chat:', conversationId);
+        refreshParticipantData(conversationId).catch(error => {
+          console.error('❌ Erreur synchronisation participant:', error);
+        });
+      }
       
       // Scroll automatique vers le bas à l'ouverture
       setTimeout(() => {
@@ -382,7 +390,7 @@ function ChatContent() {
           markAsReadIntervalRef.current = null;
         }
       };
-    }, [markConversationAsRead])
+    }, [markConversationAsRead, conversationId, refreshParticipantData])
   );
 
   // 📱 Gestion changements d'état app
