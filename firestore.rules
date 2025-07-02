@@ -95,9 +95,9 @@ service cloud.firestore {
         isParticipant(resource.data.participants) &&
         // Empêcher modification de la liste des participants
         !('participants' in request.resource.data.diff(resource.data).affectedKeys()) &&
-        // Permettre seulement mise à jour de lastMessage, updatedAt, unreadCounts, typing
+        // Permettre seulement mise à jour de lastMessage, updatedAt, unreadCounts, typing, participantDetails
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(
-          ['lastMessage', 'updatedAt', 'unreadCounts', 'typing']
+          ['lastMessage', 'updatedAt', 'unreadCounts', 'typing', 'participantDetails']
         );
       
       // Suppression : participants peuvent supprimer (incluant suppression lors de blocage)
