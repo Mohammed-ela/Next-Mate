@@ -290,8 +290,7 @@ export default function ParametresScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* 🧪 TEMPORAIRE: Composant de test pour la synchronisation */}
-          <ProfileTestComponent />
+
           
           {renderSection('⚙️ Application', appSettings)}
           {renderSection('🔒 Confidentialité', privacySettings)}
