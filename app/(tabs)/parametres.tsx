@@ -12,7 +12,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import { ProfileTestComponent } from '../../components/ProfileTestComponent';
+
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { BlockingService, type BlockedUser } from '../../services/blockingService';

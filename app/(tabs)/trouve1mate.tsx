@@ -3,16 +3,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    RefreshControl,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  FlatList,
+  Image,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useConversations } from '../../context/ConversationsContext';
@@ -162,7 +162,7 @@ export default function Trouve1MateScreen() {
         {displayBio && (
           <View style={styles.bioSection}>
             <Text style={[styles.bioText, { color: colors.textSecondary }]}>
-              "{displayBio}"
+              &ldquo;{displayBio}&rdquo;
             </Text>
           </View>
         )}
@@ -282,7 +282,7 @@ export default function Trouve1MateScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={refresh}
+            onRefresh={forceRefresh}
             colors={['#FF8E53']}
             tintColor="#FF8E53"
           />
