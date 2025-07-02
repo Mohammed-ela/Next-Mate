@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Tabs } from 'expo-router';
 import React from 'react';
-import { Platform, View } from 'react-native';
+import { Platform, Text, View } from 'react-native';
 import { NotificationBadge } from '../../components/NotificationBadge';
 import { useConversations } from '../../context/ConversationsContext';
 import { useBadgeNotifications } from '../../context/NotificationContext';
@@ -64,6 +65,61 @@ export default function TabLayout() {
           title: 'Trouver',
           tabBarIcon: ({ color }: { color: string }) => (
             <Ionicons name="search" size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="ai-matching"
+        options={{
+          title: 'IA Premium',
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
+            <View style={{
+              position: 'relative',
+              transform: [{ translateY: -8 }], // Remonter l'icône
+              shadowColor: focused ? '#8B5CF6' : 'transparent',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.4,
+              shadowRadius: 8,
+              elevation: focused ? 8 : 0,
+            }}>
+              <LinearGradient
+                colors={focused ? 
+                  ['#8B5CF6', '#FF8E53'] : 
+                  [isDarkMode ? '#6B7280' : '#9CA3AF', isDarkMode ? '#6B7280' : '#9CA3AF']
+                }
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 28,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  borderWidth: 3,
+                  borderColor: focused ? '#FFFFFF' : 'transparent',
+                }}
+              >
+                <Ionicons 
+                  name="construct" 
+                  size={28} 
+                  color={focused ? '#FFFFFF' : color} 
+                />
+                {/* Badge Premium */}
+                <View style={{
+                  position: 'absolute',
+                  top: -2,
+                  right: -2,
+                  backgroundColor: '#FFD700',
+                  borderRadius: 8,
+                  paddingHorizontal: 4,
+                  paddingVertical: 1,
+                }}>
+                  <Text style={{
+                    color: '#000',
+                    fontSize: 8,
+                    fontWeight: 'bold',
+                  }}>AI</Text>
+                </View>
+              </LinearGradient>
+            </View>
           ),
         }}
       />
