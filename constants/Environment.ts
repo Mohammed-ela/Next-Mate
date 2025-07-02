@@ -31,7 +31,12 @@ export const MISTRAL_CONFIG = {
   temperature: 0.7,
 };
 
-
+// 📧 Resend Configuration (API email professionnel)
+export const EMAIL_CONFIG = {
+  resendApiKey: process.env.EXPO_PUBLIC_RESEND_API_KEY,
+  fromEmail: process.env.EXPO_PUBLIC_FROM_EMAIL || 'onboarding@resend.dev',
+  toEmail: process.env.EXPO_PUBLIC_TO_EMAIL || 'elamrani.mohammed95@gmail.com',
+};
 
 // 🌐 Application URLs
 export const APP_URLS = {
@@ -53,6 +58,7 @@ const validateRequiredEnvVars = () => {
     'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
     'EXPO_PUBLIC_FIREBASE_APP_ID',
     'EXPO_PUBLIC_MISTRAL_API_KEY',
+    'EXPO_PUBLIC_RESEND_API_KEY',
   ];
 
   const missing = requiredVars.filter(varName => !process.env[varName]);
@@ -71,6 +77,7 @@ export default {
   CLOUDINARY_CONFIG,
   GOOGLE_CONFIG,
   MISTRAL_CONFIG,
+  EMAIL_CONFIG,
   APP_URLS,
   DEV_CONFIG,
 }; 

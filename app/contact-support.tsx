@@ -3,18 +3,19 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { EMAIL_CONFIG } from '../constants/Environment';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
@@ -44,11 +45,70 @@ export default function ContactSupportScreen() {
       return;
     }
 
+    // Vérification de la configuration email
+    if (!EMAIL_CONFIG.resendApiKey) {
+      Alert.alert('Erreur', 'Configuration email non trouvée. Contactez l\'administrateur.');
+      return;
+    }
+
     setIsSubmitting(true);
     
     try {
-      // Simuler l'envoi du formulaire
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Récupération du nom de la catégorie sélectionnée
+      const selectedCategoryObj = categories.find(cat => cat.id === selectedCategory);
+      const categoryLabel = selectedCategoryObj ? selectedCategoryObj.label : selectedCategory;
+
+      // Préparation du contenu HTML de l'email
+      const emailHtml = `
+        <h2>🎮 Nouveau message de support - NextMate</h2>
+        
+        <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+          <p><strong>👤 De :</strong> ${user?.displayName || 'Utilisateur NextMate'}</p>
+          <p><strong>📧 Email :</strong> ${email}</p>
+          <p><strong>🆔 ID Utilisateur :</strong> ${user?.uid || 'Non connecté'}</p>
+          <p><strong>📅 Date :</strong> ${new Date().toLocaleString('fr-FR')}</p>
+        </div>
+
+        <div style="margin: 20px 0;">
+          <p><strong>📂 Catégorie :</strong> ${categoryLabel}</p>
+          <p><strong>📋 Sujet :</strong> ${subject}</p>
+        </div>
+
+        <div style="background: white; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+          <h3>💬 Message :</h3>
+          <p style="white-space: pre-wrap;">${message}</p>
+        </div>
+
+        <hr style="margin: 30px 0;" />
+        <p style="color: #666; font-size: 12px;">
+          <em>Message envoyé depuis l'application NextMate</em>
+        </p>
+      `;
+
+      // Envoi via Resend API
+      const response = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${EMAIL_CONFIG.resendApiKey}`,
+        },
+        body: JSON.stringify({
+          from: `NextMate Support <${EMAIL_CONFIG.fromEmail}>`,
+          to: [EMAIL_CONFIG.toEmail],
+          subject: `[NextMate Support] ${categoryLabel} - ${subject}`,
+          html: emailHtml,
+          reply_to: email, // Permet de répondre directement à l'utilisateur
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Erreur Resend:', errorData);
+        throw new Error(`HTTP Error: ${response.status} - ${errorData.message || 'Erreur inconnue'}`);
+      }
+
+      const result = await response.json();
+      console.log('📧 Email envoyé avec succès via Resend:', result);
       
       Alert.alert(
         '✅ Message envoyé !',
@@ -61,7 +121,11 @@ export default function ContactSupportScreen() {
         ]
       );
     } catch (error) {
-      Alert.alert('Erreur', 'Impossible d\'envoyer votre message. Réessayez plus tard.');
+      console.error('❌ Erreur envoi email:', error);
+      Alert.alert(
+        'Erreur d\'envoi', 
+        'Impossible d\'envoyer votre message. Vérifiez votre connexion internet et réessayez.'
+      );
     } finally {
       setIsSubmitting(false);
     }
