@@ -22,6 +22,17 @@ export const GOOGLE_CONFIG = {
   clientId: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID || '369533672786-84t9hgfmrouguqhvrg88b4d0dq9c2p7j.apps.googleusercontent.com',
 };
 
+// 🤖 Mistral AI Configuration
+export const MISTRAL_CONFIG = {
+  apiKey: process.env.EXPO_PUBLIC_MISTRAL_API_KEY,
+  baseUrl: 'https://api.mistral.ai/v1/chat/completions',
+  model: 'mistral-large-latest',
+  maxTokens: 1000,
+  temperature: 0.7,
+};
+
+
+
 // 🌐 Application URLs
 export const APP_URLS = {
   support: process.env.EXPO_PUBLIC_SUPPORT_URL || 'https://www.nextmate.gg/support/date_de_naissance/',
@@ -41,6 +52,7 @@ const validateRequiredEnvVars = () => {
     'EXPO_PUBLIC_FIREBASE_API_KEY',
     'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
     'EXPO_PUBLIC_FIREBASE_APP_ID',
+    'EXPO_PUBLIC_MISTRAL_API_KEY',
   ];
 
   const missing = requiredVars.filter(varName => !process.env[varName]);
@@ -58,6 +70,7 @@ export default {
   FIREBASE_CONFIG,
   CLOUDINARY_CONFIG,
   GOOGLE_CONFIG,
+  MISTRAL_CONFIG,
   APP_URLS,
   DEV_CONFIG,
 }; 

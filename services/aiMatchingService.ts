@@ -1,15 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { MISTRAL_CONFIG } from '../constants/Environment';
 import { logger } from '../utils/logger';
 import { UserProfile } from './userService';
-
-// Configuration Mistral
-const MISTRAL_CONFIG = {
-  API_KEY: '0dFjQcToOwPJaEMEftIQgnA6VIlOnVTt',
-  BASE_URL: 'https://api.mistral.ai/v1/chat/completions',
-  MODEL: 'mistral-large-latest',
-  MAX_TOKENS: 1000,
-  TEMPERATURE: 0.7,
-};
 
 // Limitation utilisateur : 1 requête par 24h
 const RATE_LIMIT = {
@@ -151,22 +143,22 @@ RÉPONSE ATTENDUE: Réponds UNIQUEMENT avec les 3 numéros séparés par des vir
     try {
       logger.info('AiMatchingService', 'Appel API Mistral...');
       
-      const response = await fetch(MISTRAL_CONFIG.BASE_URL, {
+      const response = await fetch(MISTRAL_CONFIG.baseUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${MISTRAL_CONFIG.API_KEY}`,
+          'Authorization': `Bearer ${MISTRAL_CONFIG.apiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: MISTRAL_CONFIG.MODEL,
+          model: MISTRAL_CONFIG.model,
           messages: [
             {
               role: 'user',
               content: prompt,
             },
           ],
-          max_tokens: MISTRAL_CONFIG.MAX_TOKENS,
-          temperature: MISTRAL_CONFIG.TEMPERATURE,
+          max_tokens: MISTRAL_CONFIG.maxTokens,
+          temperature: MISTRAL_CONFIG.temperature,
         }),
       });
 
