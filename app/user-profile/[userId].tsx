@@ -3,13 +3,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useState } from 'react';
 import {
-    Image,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Image,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useConversations } from '../../context/ConversationsContext';
@@ -38,6 +38,13 @@ export default function UserProfileScreen() {
       const targetUser = users.find(u => u.uid === userId);
       
       if (targetUser) {
+        console.log('🎮 Profil utilisateur récupéré:', {
+          name: targetUser.name,
+          favoriteGames: targetUser.preferences?.favoriteGames,
+          gamesCount: targetUser.preferences?.favoriteGames?.length || 0,
+          statsGames: targetUser.stats?.totalGames,
+          hasGames: !!(targetUser.preferences?.favoriteGames?.length)
+        });
         setUser(targetUser);
       }
     } catch (error) {
@@ -53,7 +60,9 @@ export default function UserProfileScreen() {
     try {
       console.log('🔄 Tentative de connexion avec:', user.name);
       
+      // Récupérer les jeux depuis la structure normalisée UserProfile
       const targetUserGames = user.preferences?.favoriteGames || [];
+      const firstGame = targetUserGames[0]; // Déjà des strings d'après UserService
       
       const participant = {
         id: user.uid,
@@ -61,7 +70,7 @@ export default function UserProfileScreen() {
         avatar: user.avatar || '🎮',
         isImageAvatar: user.avatar?.startsWith('http') || false,
         isOnline: user.isOnline || false,
-        ...(targetUserGames[0] && { currentGame: targetUserGames[0] }),
+        ...(firstGame && { currentGame: firstGame }),
       };
 
       const conversationId = await createConversation(participant);
@@ -206,7 +215,7 @@ export default function UserProfileScreen() {
               >
                 <Text style={styles.statEmoji}>🎮</Text>
               </LinearGradient>
-              <Text style={styles.statValue}>{user.stats.totalGames}</Text>
+              <Text style={styles.statValue}>{user.preferences?.favoriteGames?.length || 0}</Text>
               <Text style={styles.statLabel}>Jeux</Text>
             </View>
 
@@ -235,9 +244,12 @@ export default function UserProfileScreen() {
           {/* Jeux favoris - Layout fluide */}
           {user.preferences?.favoriteGames && user.preferences.favoriteGames.length > 0 && (
             <View style={styles.gamesCard}>
-              <Text style={styles.sectionTitle}>🎮 Jeux favoris ({user.preferences.favoriteGames.length})</Text>
+              <Text style={styles.sectionTitle}>
+                🎮 Jeux favoris ({user.preferences.favoriteGames.length})
+              </Text>
               <View style={styles.gamesList}>
-                {user.preferences.favoriteGames.map((game, index) => (
+                {/* Affichage des jeux - déjà normalisés en string[] par UserService */}
+                {user.preferences.favoriteGames.map((game: string, index: number) => (
                   <View key={index} style={styles.gameChip}>
                     <Text style={styles.gameText}>{game}</Text>
                   </View>
