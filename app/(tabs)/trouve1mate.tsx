@@ -29,7 +29,7 @@ export default function Trouve1MateScreen() {
   const { user: currentUser } = useAuth();
   const { profile } = useUserProfile();
 
-  // 🚀 Utilisation du nouveau hook avec mise à jour temps réel
+  // 🚀 Utilisation du hook avec mise à jour temps réel et filtrage intelligent
   const { 
     users, 
     loading, 
@@ -174,7 +174,7 @@ export default function Trouve1MateScreen() {
               🎮 Jeux favoris ({favoriteGames.length})
             </Text>
             <View style={styles.gamesList}>
-              {favoriteGames.slice(0, 3).map((game, index) => (
+              {favoriteGames.slice(0, 3).map((game: string, index: number) => (
                 <View key={index} style={[styles.gameChip, { backgroundColor: colors.background }]}>
                   <Text style={[styles.gameText, { color: '#8B5CF6' }]}>{game}</Text>
                 </View>

@@ -1,10 +1,6 @@
 import {
-    collection,
     doc,
     getDoc,
-    getDocs,
-    limit,
-    query,
     setDoc,
     updateDoc
 } from 'firebase/firestore';
@@ -191,7 +187,7 @@ export class UserService {
     }
   }
 
-  // 🎯 Découverte d'utilisateurs avec filtrage et blocage
+  // 🎯 Découverte d'utilisateurs avec matching intelligent
   static async getDiscoveryUsers(
     currentUserId: string, 
     filters: {
@@ -213,112 +209,63 @@ export class UserService {
         return cached;
       }
 
-      logger.info('UserService', 'Récupération utilisateurs découverte avec filtres', filters);
+      logger.info('UserService', 'Récupération utilisateurs découverte avec matching intelligent', filters);
 
-      // Construction de la requête de base
-      let baseQuery = query(
-        collection(db, 'users'),
-        // where('isOnline', '==', true), // NOTE: Filtre désactivé pour afficher tous les utilisateurs
-        limit(PERFORMANCE_CONFIG.DISCOVERY_LIMIT * 2) // Plus d'utilisateurs pour filtrer
-      );
-
-      const snapshot = await getDocs(baseQuery);
-      let users: UserProfile[] = [];
-
-      // Traitement par batch pour optimiser
-      const docs = snapshot.docs;
-      for (let i = 0; i < docs.length; i += PERFORMANCE_CONFIG.BATCH_SIZE) {
-        const batch = docs.slice(i, i + PERFORMANCE_CONFIG.BATCH_SIZE);
-        
-        const batchUsers = batch
-          .filter(doc => doc.id !== currentUserId) // Exclure l'utilisateur actuel
-          .map(doc => {
-            const data = doc.data();
-            
-
-            
-            return {
-              uid: doc.id,
-              email: data.email || '',
-              name: data.pseudo || data.name || 'Joueur',
-              avatar: data.profilePicture || data.avatar || '🎮',
-              preferences: {
-                favoriteGames: data.games?.map((game: any) => game.name).filter(Boolean) || data.preferences?.favoriteGames || [],
-                preferredTimeSlots: Array.isArray(data.availability) ? data.availability : data.availability?.flatMap((slot: any) => slot.timeSlots) || data.preferences?.preferredTimeSlots || [],
-                gameRanks: data.preferences?.gameRanks || {},
-                gameStyles: data.gamingStyle?.personality || data.preferences?.gameStyles || [],
-                bio: data.bio || data.preferences?.bio,
-                ageRange: data.age ? `${data.age}` : data.preferences?.ageRange,
-                location: data.location || data.preferences?.location,
-                gender: data.gender || data.preferences?.gender,
-              },
-              stats: {
-                totalMatches: data.stats?.totalMatches || 0,
-                totalGames: data.stats?.totalGames || 0,
-                joinDate: safeTimestampToDate(data.stats?.joinDate) || new Date(),
-                lastActive: safeTimestampToDate(data.stats?.lastActive) || new Date(),
-                rating: data.stats?.rating || 1000,
-              },
-              isOnline: data.isOnline || false,
-              createdAt: safeTimestampToDate(data.createdAt) || new Date(),
-              updatedAt: safeTimestampToDate(data.updatedAt) || new Date(),
-            } as UserProfile;
-          });
-
-        users.push(...batchUsers);
+      // 🧠 NOUVEAU: Récupérer le profil de l'utilisateur actuel pour le matching
+      const currentUserProfile = await this.getUserProfile(currentUserId, false);
+      if (!currentUserProfile) {
+        logger.warn('UserService', 'Profil utilisateur actuel non trouvé pour matching intelligent');
+        // Fallback vers l'ancienne méthode si pas de profil
+        return this.getBasicDiscoveryUsers(currentUserId, filters);
       }
 
-      // Filtrage avancé
-      const filteredUsers = users.filter(user => {
-        // Filtre jeux favoris
-        if (filters.favoriteGames?.length) {
-          const hasCommonGame = user.preferences.favoriteGames.some(game => 
-            filters.favoriteGames!.includes(game)
-          );
-          if (!hasCommonGame) return false;
+      // 🧠 Utiliser le matching intelligent
+      try {
+        // Importer le MatchingService dynamiquement pour éviter les dépendances circulaires
+        const { default: MatchingService } = await import('./matchingService');
+        
+        // Utiliser le MatchingService pour obtenir des correspondances intelligentes
+        const matches = await MatchingService.findMatches(
+          currentUserId,
+          currentUserProfile,
+          {
+            onlineOnly: false,
+          },
+          PERFORMANCE_CONFIG.DISCOVERY_LIMIT
+        );
+
+        // Récupérer les profils complets des utilisateurs correspondants
+        const matchedUsers: UserProfile[] = [];
+        for (const match of matches) {
+          const userProfile = await this.getUserProfile(match.userId, true);
+          if (userProfile) {
+            matchedUsers.push(userProfile);
+          }
         }
 
-        // Filtre créneaux horaires
-        if (filters.preferredTimeSlots?.length) {
-          const hasCommonTimeSlot = user.preferences.preferredTimeSlots.some(slot => 
-            filters.preferredTimeSlots!.includes(slot)
-          );
-          if (!hasCommonTimeSlot) return false;
-        }
+        // Filtrer les utilisateurs bloqués
+        const finalUsers = await BlockingService.filterBlockedUsers(currentUserId, matchedUsers);
+        
+        // Mettre en cache
+        cacheManager.set('discovery', cacheKey, finalUsers);
 
-        // Filtre styles de jeu
-        if (filters.gameStyles?.length) {
-          const hasCommonStyle = user.preferences.gameStyles.some(style => 
-            filters.gameStyles!.includes(style)
-          );
-          if (!hasCommonStyle) return false;
-        }
+        const duration = Date.now() - startTime;
+        logger.performance('Intelligent Discovery Load', duration, {
+          matches: matches.length,
+          profiles: matchedUsers.length,
+          afterBlocking: finalUsers.length,
+          avgScore: matches.length > 0 
+            ? matches.reduce((sum, match) => sum + match.score, 0) / matches.length 
+            : 0
+        });
 
-        // Filtre rating
-        if (filters.minRating && user.stats.rating < filters.minRating) return false;
-        if (filters.maxRating && user.stats.rating > filters.maxRating) return false;
+        return finalUsers;
 
-        return true;
-      });
-
-      // Filtrer les utilisateurs bloqués
-      const finalUsers = await BlockingService.filterBlockedUsers(currentUserId, filteredUsers);
-
-      // Limiter le résultat
-      const limitedUsers = finalUsers.slice(0, PERFORMANCE_CONFIG.DISCOVERY_LIMIT);
-      
-      // Mettre en cache
-      cacheManager.set('discovery', cacheKey, limitedUsers);
-
-      const duration = Date.now() - startTime;
-      logger.performance('Discovery Users Load', duration, {
-        totalFound: users.length,
-        afterFilter: filteredUsers.length,
-        afterBlocking: finalUsers.length,
-        returned: limitedUsers.length
-      });
-
-      return limitedUsers;
+      } catch (matchingError) {
+        logger.error('UserService', 'Erreur matching intelligent, fallback vers méthode basique', matchingError);
+        // En cas d'erreur avec le matching intelligent, utiliser l'ancienne méthode
+        return this.getBasicDiscoveryUsers(currentUserId, filters);
+      }
 
     } catch (error) {
       logger.error('UserService', 'Erreur récupération utilisateurs découverte', error);
@@ -445,6 +392,125 @@ export class UserService {
     
     // Recharger immédiatement
     return this.getDiscoveryUsers(currentUserId);
+  }
+
+  // 📊 MÉTHODE FALLBACK: Ancienne méthode de découverte basique (sans matching intelligent)
+  static async getBasicDiscoveryUsers(
+    currentUserId: string, 
+    filters: {
+      favoriteGames?: string[];
+      preferredTimeSlots?: string[];
+      gameStyles?: string[];
+      minRating?: number;
+      maxRating?: number;
+    } = {}
+  ): Promise<UserProfile[]> {
+    try {
+      // Import nécessaire pour cette méthode
+      const { collection, getDocs, query, limit } = await import('firebase/firestore');
+      
+      // Construction de la requête de base
+      let baseQuery = query(
+        collection(db, 'users'),
+        limit(PERFORMANCE_CONFIG.DISCOVERY_LIMIT * 2)
+      );
+
+      const snapshot = await getDocs(baseQuery);
+      let users: UserProfile[] = [];
+
+      // Traitement par batch pour optimiser
+      const docs = snapshot.docs;
+      for (let i = 0; i < docs.length; i += PERFORMANCE_CONFIG.BATCH_SIZE) {
+        const batch = docs.slice(i, i + PERFORMANCE_CONFIG.BATCH_SIZE);
+        
+        const batchUsers = batch
+          .filter(doc => doc.id !== currentUserId) // Exclure l'utilisateur actuel
+          .map(doc => {
+            const data = doc.data();
+            
+            return {
+              uid: doc.id,
+              email: data.email || '',
+              name: data.pseudo || data.name || 'Joueur',
+              avatar: data.profilePicture || data.avatar || '🎮',
+              preferences: {
+                favoriteGames: data.games?.map((game: any) => game.name).filter(Boolean) || data.preferences?.favoriteGames || [],
+                preferredTimeSlots: Array.isArray(data.availability) ? data.availability : data.availability?.flatMap((slot: any) => slot.timeSlots) || data.preferences?.preferredTimeSlots || [],
+                gameRanks: data.preferences?.gameRanks || {},
+                gameStyles: data.gamingStyle?.personality || data.preferences?.gameStyles || [],
+                bio: data.bio || data.preferences?.bio,
+                ageRange: data.age ? `${data.age}` : data.preferences?.ageRange,
+                location: data.location || data.preferences?.location,
+                gender: data.gender || data.preferences?.gender,
+              },
+              stats: {
+                totalMatches: data.stats?.totalMatches || 0,
+                totalGames: data.stats?.totalGames || 0,
+                joinDate: safeTimestampToDate(data.stats?.joinDate) || new Date(),
+                lastActive: safeTimestampToDate(data.stats?.lastActive) || new Date(),
+                rating: data.stats?.rating || 1000,
+              },
+              isOnline: data.isOnline || false,
+              createdAt: safeTimestampToDate(data.createdAt) || new Date(),
+              updatedAt: safeTimestampToDate(data.updatedAt) || new Date(),
+            } as UserProfile;
+          });
+
+        users.push(...batchUsers);
+      }
+
+      // Filtrage avancé
+      const filteredUsers = users.filter(user => {
+        // Filtre jeux favoris
+        if (filters.favoriteGames?.length) {
+          const hasCommonGame = user.preferences.favoriteGames.some(game => 
+            filters.favoriteGames!.includes(game)
+          );
+          if (!hasCommonGame) return false;
+        }
+
+        // Filtre créneaux horaires
+        if (filters.preferredTimeSlots?.length) {
+          const hasCommonTimeSlot = user.preferences.preferredTimeSlots.some(slot => 
+            filters.preferredTimeSlots!.includes(slot)
+          );
+          if (!hasCommonTimeSlot) return false;
+        }
+
+        // Filtre styles de jeu
+        if (filters.gameStyles?.length) {
+          const hasCommonStyle = user.preferences.gameStyles.some(style => 
+            filters.gameStyles!.includes(style)
+          );
+          if (!hasCommonStyle) return false;
+        }
+
+        // Filtre rating
+        if (filters.minRating && user.stats.rating < filters.minRating) return false;
+        if (filters.maxRating && user.stats.rating > filters.maxRating) return false;
+
+        return true;
+      });
+
+      // Filtrer les utilisateurs bloqués
+      const finalUsers = await BlockingService.filterBlockedUsers(currentUserId, filteredUsers);
+
+      // Limiter le résultat
+      const limitedUsers = finalUsers.slice(0, PERFORMANCE_CONFIG.DISCOVERY_LIMIT);
+      
+      logger.info('UserService', 'Découverte basique terminée', {
+        totalFound: users.length,
+        afterFilter: filteredUsers.length,
+        afterBlocking: finalUsers.length,
+        returned: limitedUsers.length
+      });
+
+      return limitedUsers;
+
+    } catch (error) {
+      logger.error('UserService', 'Erreur récupération utilisateurs découverte basique', error);
+      return [];
+    }
   }
 }
 
