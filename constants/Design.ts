@@ -1,7 +1,7 @@
-// 🎨 CONSTANTS DE DESIGN CENTRALISÉES - NEXTMATE
+// Constants de design centralisées - NextMate
 // Toutes les valeurs répétées dans l'app en un seul endroit
 
-// 🌈 COULEURS PRINCIPALES
+// Couleurs principales
 export const COLORS = {
   // Couleurs principales NextMate
   PRIMARY_ORANGE: '#FF8E53',
@@ -32,7 +32,7 @@ export const COLORS = {
   BLACK_50: 'rgba(0, 0, 0, 0.5)',
 } as const;
 
-// 🔄 GRADIENTS COMMUNS
+// Gradients communs
 export const GRADIENTS = {
   ORANGE: [COLORS.PRIMARY_ORANGE, COLORS.SECONDARY_ORANGE] as [string, string],
   PURPLE: [COLORS.PRIMARY_PURPLE, COLORS.SECONDARY_PURPLE] as [string, string],
@@ -40,7 +40,7 @@ export const GRADIENTS = {
   ORANGE_PURPLE: [COLORS.PRIMARY_ORANGE, COLORS.PRIMARY_PURPLE] as [string, string],
 } as const;
 
-// 📏 TAILLES ET ESPACEMENTS
+// Tailles et espacements
 export const SPACING = {
   // Marges et padding standards
   XS: 4,
@@ -57,7 +57,7 @@ export const SPACING = {
   HEADER_PADDING: 60,
 } as const;
 
-// 🔘 BORDER RADIUS
+// Border radius
 export const RADIUS = {
   // Rayons standards
   SM: 8,
@@ -75,7 +75,7 @@ export const RADIUS = {
   AVATAR: 50, // Pourcentage pour cercle parfait
 } as const;
 
-// 📝 TYPOGRAPHIE
+// Typographie
 export const TYPOGRAPHY = {
   // Tailles de police
   FONT_SIZE: {
@@ -109,7 +109,7 @@ export const TYPOGRAPHY = {
   },
 } as const;
 
-// 🎭 OMBRES COMMUNES
+// Ombres communes
 export const SHADOWS = {
   // Ombres pour cartes
   CARD: {
@@ -139,7 +139,7 @@ export const SHADOWS = {
   },
 } as const;
 
-// ⏱️ ANIMATIONS
+// Animations
 export const ANIMATIONS = {
   // Durées standards
   DURATION: {
@@ -157,7 +157,7 @@ export const ANIMATIONS = {
   },
 } as const;
 
-// 📱 DIMENSIONS
+// Dimensions
 export const DIMENSIONS = {
   // Tailles d'avatars
   AVATAR: {
@@ -184,7 +184,7 @@ export const DIMENSIONS = {
   },
 } as const;
 
-// 🎯 UTILITAIRES DE STYLE COMMUNS
+// Utilitaires de style communs
 export const COMMON_STYLES = {
   // Centre absolu
   CENTER: {
@@ -198,12 +198,18 @@ export const COMMON_STYLES = {
   },
   
   // Positionnement
-  ABSOLUTE_FILL: {
+  ABSOLUTE: {
     position: 'absolute' as const,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  },
+  
+  // Texte centré
+  TEXT_CENTER: {
+    textAlign: 'center' as const,
+  },
+  
+  // Cacher overflow
+  HIDDEN: {
+    overflow: 'hidden' as const,
   },
 } as const;
 

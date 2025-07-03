@@ -1,9 +1,9 @@
-// 🛠️ FONCTIONS UTILITAIRES DE FORMATAGE - NEXTMATE
+// Fonctions utilitaires de formatage - NextMate
 // Toutes les fonctions de formatage répétées dans l'app
 
 import { COLORS } from '../constants/Design';
 
-// ⏰ FORMATAGE DU TEMPS
+// Formatage du temps
 export const formatTime = {
   // Formatage intelligent "il y a X temps"
   timeAgo: (date: Date): string => {
@@ -59,7 +59,7 @@ export const formatTime = {
   },
 };
 
-// 🎮 FORMATAGE GAMING
+// Formatage gaming
 export const formatGaming = {
   // Affichage du rating avec couleur
   rating: (rating: number): { text: string; color: string } => {
@@ -107,7 +107,7 @@ export const formatGaming = {
   },
 };
 
-// 📱 FORMATAGE UI
+// Formatage UI
 export const formatUI = {
   // Raccourcissement de texte avec ellipse
   truncate: (text: string, maxLength: number): string => {
@@ -143,7 +143,7 @@ export const formatUI = {
   },
 };
 
-// 🎨 FORMATAGE COULEURS
+// Formatage couleurs
 export const formatColors = {
   // Couleur aléatoire pour avatar
   randomAvatarColor: (): string => {
@@ -183,7 +183,7 @@ export const formatColors = {
   },
 };
 
-// 📊 FORMATAGE DONNÉES
+// Formatage données
 export const formatData = {
   // Validation email
   isValidEmail: (email: string): boolean => {
@@ -198,26 +198,27 @@ export const formatData = {
   },
 
   // Nettoyage de string pour recherche
-  searchNormalize: (text: string): string => {
-    return text
+  cleanSearchTerm: (term: string): string => {
+    return term
       .toLowerCase()
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '') // Supprime les accents
-      .trim();
+      .trim()
+      .replace(/[^\w\s]/g, '') // Supprimer caractères spéciaux
+      .replace(/\s+/g, ' '); // Normaliser espaces
   },
 
-  // Formatage taille de fichier
-  fileSize: (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+  // Validation âge (13-100 ans)
+  isValidAge: (age: number): boolean => {
+    return age >= 13 && age <= 100;
+  },
+
+  // Validation bio (max 500 caractères)
+  isValidBio: (bio: string): boolean => {
+    return bio.length <= 500;
   },
 };
 
-// 🎯 EXPORT GROUPÉ
-export const formatters = {
+// Export groupé pour facilité d'import
+export default {
   time: formatTime,
   gaming: formatGaming,
   ui: formatUI,

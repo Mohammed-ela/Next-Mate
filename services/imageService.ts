@@ -118,11 +118,6 @@ export class ImageService {
     }
   }
   
-  // 🔍 Vérifier si une URL est une image Firebase
-  static isFirebaseImage(url: string): boolean {
-    return url.includes('firebasestorage.googleapis.com') || url.includes('storage.googleapis.com');
-  }
-  
   // 🔍 Vérifier si une URL est une image locale
   static isLocalImage(url: string): boolean {
     return url.startsWith('file://') || url.startsWith('content://');
@@ -150,9 +145,8 @@ export class ImageService {
   }
 
   // 🔍 Détecter le type d'avatar
-  static detectAvatarType(avatar: string): 'cloudinary' | 'firebase' | 'local' | 'emoji' | 'url' {
+  static detectAvatarType(avatar: string): 'cloudinary' | 'local' | 'emoji' | 'url' {
     if (this.isCloudinaryImage(avatar)) return 'cloudinary';
-    if (this.isFirebaseImage(avatar)) return 'firebase';
     if (this.isLocalImage(avatar)) return 'local';
     if (avatar.startsWith('http')) return 'url';
     return 'emoji';
