@@ -3,11 +3,11 @@ import {
     Animated,
     StyleSheet,
     Text,
-    TextStyle,
     TouchableOpacity,
     View,
-    ViewStyle,
+    ViewStyle
 } from 'react-native';
+import { COLORS, RADIUS, TYPOGRAPHY } from '../constants/Design';
 import { useTheme } from '../context/ThemeContext';
 
 interface InteractiveBadgeProps {
@@ -17,9 +17,9 @@ interface InteractiveBadgeProps {
   onAnimationComplete?: () => void;
   size?: 'small' | 'medium' | 'large';
   style?: ViewStyle;
-  textStyle?: TextStyle;
+  textStyle?: any;
   color?: string;
-  position?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
+  position?: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   children?: React.ReactNode;
 }
 
@@ -104,18 +104,18 @@ export const InteractiveBadge: React.FC<InteractiveBadgeProps> = ({
       case 'large':
         return { minWidth: 32, height: 32, borderRadius: 16 };
       default:
-        return { minWidth: 24, height: 24, borderRadius: 12 };
+        return { minWidth: 24, height: 24, borderRadius: RADIUS.MD };
     }
   };
 
   const getTextStyle = () => {
     switch (size) {
       case 'small':
-        return { fontSize: 10, fontWeight: '600' as const };
+        return { fontSize: TYPOGRAPHY.FONT_SIZE.XS, fontWeight: TYPOGRAPHY.FONT_WEIGHT.SEMIBOLD };
       case 'large':
-        return { fontSize: 14, fontWeight: '700' as const };
+        return { fontSize: TYPOGRAPHY.FONT_SIZE.MD, fontWeight: TYPOGRAPHY.FONT_WEIGHT.BOLD };
       default:
-        return { fontSize: 12, fontWeight: '700' as const };
+        return { fontSize: TYPOGRAPHY.FONT_SIZE.SM, fontWeight: TYPOGRAPHY.FONT_WEIGHT.BOLD };
     }
   };
 
@@ -139,7 +139,7 @@ export const InteractiveBadge: React.FC<InteractiveBadgeProps> = ({
     return children ? <>{children}</> : null;
   }
 
-  const badgeColor = color || '#FF8E53';
+  const badgeColor = color || COLORS.PRIMARY_ORANGE;
   const displayCount = count > 99 ? '99+' : count.toString();
 
   const BadgeComponent = (
@@ -162,7 +162,7 @@ export const InteractiveBadge: React.FC<InteractiveBadgeProps> = ({
         style={[
           styles.badgeText,
           getTextStyle(),
-          { color: '#FFFFFF' },
+          { color: COLORS.WHITE },
           textStyle,
         ]}
       >
