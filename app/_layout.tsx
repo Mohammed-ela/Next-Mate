@@ -1,5 +1,6 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
+import { LogBox } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { toastConfig } from '../components/NextMateToast';
 import { AppConfigProvider } from '../context/AppConfigContext';
@@ -9,6 +10,9 @@ import { BadgeNotificationProvider } from '../context/NotificationContext';
 import { OnboardingProvider, useOnboarding } from '../context/OnboardingContext';
 import { ThemeProvider } from '../context/ThemeContext';
 import { UserProfileProvider } from '../context/UserProfileContext';
+
+// 🔇 Désactiver tous les warnings/logs en développement
+LogBox.ignoreAllLogs();
 
 // 🔇 Supprime le warning Firebase AsyncStorage spécifique
 const originalWarn = console.warn;
