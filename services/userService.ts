@@ -1,8 +1,8 @@
 import {
-    doc,
-    getDoc,
-    setDoc,
-    updateDoc
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import cacheManager from '../utils/cacheManager';
@@ -369,6 +369,23 @@ export class UserService {
     cacheManager.invalidateCache('discovery');
     this.lastCacheInvalidation = Date.now();
     logger.info('UserService', 'Cache découverte invalidé');
+  }
+
+  // 🔥 Invalider TOUS les caches pour un refresh complet (pull-to-refresh)
+  static invalidateAllCachesForRefresh(): void {
+    // 1. Invalider TOUS les profils utilisateurs en cache
+    cacheManager.invalidateCache('userProfiles');
+    
+    // 2. Invalider TOUT le cache discovery
+    cacheManager.invalidateCache('discovery');
+    
+    // 3. Invalider le cache matching si il existe
+    cacheManager.invalidateCache('matching');
+    
+    // 4. Mettre à jour le timestamp d'invalidation
+    this.lastCacheInvalidation = Date.now();
+    
+    logger.info('UserService', '🔥 TOUS les caches invalidés pour refresh complet (profils + discovery + matching)');
   }
 
   // 💥 Invalider tous les caches liés à un profil utilisateur

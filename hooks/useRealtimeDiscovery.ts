@@ -47,9 +47,10 @@ export function useRealtimeDiscovery(
       }
       setError(null);
 
-      // Si force refresh, vider d'abord le cache
+      // Si force refresh, vider d'abord TOUS les caches pour récupérer les profils mis à jour
       if (forceCache) {
-        UserService.invalidateDiscoveryCache();
+        UserService.invalidateAllCachesForRefresh();
+        logger.info('useRealtimeDiscovery', '🔥 Force refresh : tous les caches invalidés');
       }
 
       const discoveryUsers = await UserService.getDiscoveryUsers(currentUser.uid);
@@ -81,6 +82,7 @@ export function useRealtimeDiscovery(
 
   // 💪 Force refresh (vide le cache et recharge)
   const forceRefresh = useCallback(async () => {
+    logger.info('useRealtimeDiscovery', '💪 FORCE REFRESH déclenché : mise à jour complète des profils (nom, photo, bio, jeux, etc.)');
     await loadUsers(true, true);
   }, [loadUsers]);
 
@@ -119,9 +121,10 @@ export function useRealtimeDiscovery(
 
         logger.info('useRealtimeDiscovery', 'Changement détecté dans les profils utilisateurs');
         
-        // Refresh automatique avec un léger délai pour éviter les appels en cascade
+        // Refresh automatique NORMAL (pas forceRefresh) avec un léger délai pour éviter les appels en cascade
+        // Le forceRefresh est réservé au swipe manuel de l'utilisateur
         setTimeout(() => {
-          forceRefresh();
+          refresh(); // Refresh normal qui utilise le cache s'il est encore valide
         }, 2000);
       },
       (error) => {
@@ -138,7 +141,7 @@ export function useRealtimeDiscovery(
         unsubscribeRef.current = null;
       }
     };
-  }, [currentUser?.uid, enableRealtime, users.length, forceRefresh]);
+  }, [currentUser?.uid, enableRealtime, users.length, refresh]);
 
   // ⏰ Refresh automatique périodique
   useEffect(() => {
