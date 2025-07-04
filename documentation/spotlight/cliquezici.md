@@ -1,0 +1,1 @@
+C'est une architecture serverless/BaaS classique qui évite complètement le besoin d'un backend API traditionnel.
