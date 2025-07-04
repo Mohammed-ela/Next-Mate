@@ -101,10 +101,6 @@ yarn-error.*
 .vscode/
 .idea/
 
-# Testing
-coverage/
-__tests__/
-
 # Build
 build/
 *.tgz
