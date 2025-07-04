@@ -1,1 +1,0 @@
-https://www.notion.so/cahier-des-charges-225ea71c695580969c6feb810e37fb6f?source=copy_link
